@@ -115,7 +115,52 @@ async function initializeDatabase() {
     }
 }
 
+// Singleton Database Connection Class
+class DatabaseConnection {
+    constructor() {
+        this.client = null;
+    }
+
+    async getClient() {
+        if (!this.client) {
+            this.client = await pool.connect();
+            console.log('✅ Database connection instance established');
+        }
+        return this.client;
+    }
+
+    async closeConnection() {
+        if (this.client) {
+            await this.client.release();
+            this.client = null;
+            console.log('🔌 Database connection instance closed');
+        }
+    }
+
+    // Graceful shutdown handler
+    async handleShutdown() {
+        await this.closeConnection();
+        await pool.end();
+        console.log('🔌 PostgreSQL pool closed');
+    }
+}
+
+// Create singleton instance
+const dbInstance = new DatabaseConnection();
+
+// Handle graceful shutdown
+process.on('SIGINT', async () => {
+    await dbInstance.handleShutdown();
+    process.exit(0);
+});
+
+process.on('SIGTERM', async () => {
+    await dbInstance.handleShutdown();
+    process.exit(0);
+});
+
 module.exports = {
     pool,
+    dbInstance,
     initializeDatabase
 };

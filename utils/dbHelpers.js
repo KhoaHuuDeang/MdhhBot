@@ -1,4 +1,4 @@
-const { pool } = require('../db/database');
+const { dbInstance } = require('../db/database');
 
 // User-related database operations
 class UserService {
@@ -9,8 +9,10 @@ class UserService {
     // Tạo user mới hoặc lấy user hiện có
     static async getOrCreateUser(userId, username = null) {
         try {
+            const client = await dbInstance.getClient();
+
             // Kiểm tra user đã tồn tại chưa
-            const existingUser = await pool.query(
+            const existingUser = await client.query(
                 'SELECT * FROM users WHERE user_id = $1',
                 [userId]
             );
@@ -32,15 +34,14 @@ class UserService {
         } catch (error) {
             console.error('Error in getOrCreateUser:', error);
             throw error;
-        } finally {
-            client.release();
         }
     }
 
     // Lấy thông tin balance của user
     static async getUserBalance(userId) {
         try {
-            const result = await pool.query(
+            const client = await dbInstance.getClient();
+            const result = await client.query(
                 'SELECT balance, balance_vip, total_earned, total_earned_vip FROM users WHERE user_id = $1',
                 [userId]
             );
@@ -53,8 +54,6 @@ class UserService {
         } catch (error) {
             console.error('Error in getUserBalance:', error);
             throw error;
-        } finally {
-            client.release();
         }
     }
     // Transfer coins từ user này sang user khác
