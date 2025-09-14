@@ -113,6 +113,7 @@ class UserService {
     // Lấy leaderboard
     static async getLeaderboard(orderBy = 'balance', limit = 10) {
         try {
+            const client = await dbInstance.getClient();
             const validColumns = ['balance', 'total_earned'];
             if (!validColumns.includes(orderBy)) {
                 orderBy = 'balance';
