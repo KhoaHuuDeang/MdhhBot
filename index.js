@@ -103,14 +103,14 @@ client.once('clientReady', async () => {
             let minutesLeft = 60;
             let countdownMessage = null
             let coin = 0;
-            countdownMessage = await currentChannel.send(`<a:a_g_Cheer:...> Xinn chào bạn học ${thisTime.member.displayName}! Từ bây giờ nếu bạn tham gia VC, mỗi 1 tiếng học sẽ quy đổi ra thành một 1MĐ Coin Yay ! \n Bạn còn ${minutesLeft} phút để nhận thưởng ! \n trong phiên học này bạn đã kiếm được ${coin} MĐCoin!`);
+            countdownMessage = await currentChannel.send(`<a:a_g_Cheer:1301431655503892531> Xinn chào bạn học ${thisTime.member.displayName}! Từ bây giờ nếu bạn tham gia VC, mỗi 1 tiếng học sẽ quy đổi ra thành một 1MĐ Coin Yay ! \n Bạn còn ${minutesLeft} phút để nhận thưởng ! \n trong phiên học này bạn đã kiếm được ${coin} MĐCoin!`);
             const countdownTimer = setInterval(async () => {
                 minutesLeft--
-                await countdownMessage.edit(`<a:a_g_Cheer:...> Xin chào bạn học ${thisTime.member.displayName}! Từ bây giờ nếu bạn tham gia VC, mỗi 1 tiếng học sẽ quy đổi ra thành một 1MĐ Coin Yay ! \n Bạn còn ${minutesLeft} phút để nhận thưởng ! \n trong phiên học này bạn đã kiếm được ${coin} MĐCoin!`);
+                await countdownMessage.edit(`<a:a_g_Cheer:1301431655503892531> Xin chào bạn học ${thisTime.member.displayName}! Từ bây giờ nếu bạn tham gia VC, mỗi 1 tiếng học sẽ quy đổi ra thành một 1MĐ Coin Yay ! \n Bạn còn ${minutesLeft} phút để nhận thưởng ! \n trong phiên học này bạn đã kiếm được ${coin} MĐCoin!`);
 
                 if (minutesLeft === 0) {
                     coin++
-                    await currentChannel.send(`🎉 ${thisTime.member.displayName} +1 MĐCoin!`);
+                    await currentChannel.send(`<a:a_b_gojotwerk:1288783436718411776> ${thisTime.member.displayName} +1 MĐCoin!`);
                     minutesLeft = 60; // Reset để đếm tiếp
                 }
             }, 60 * 1000);
