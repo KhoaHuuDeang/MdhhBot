@@ -91,8 +91,8 @@ client.once('clientReady', async () => {
         // có user trong database thì mới check được 
         let balance = await getUserBalance(user.id)
 
-        // User join voice (standard) -  
-        if (thisTime.channelId && (!lastTime.channelId || lastTime.channelId === '1357199605955039363')) {
+        // User join voice (standard) - exclude intermediate channel
+        if (thisTime.channelId && thisTime.channelId !== '1357199605955039363' && (!lastTime.channelId || lastTime.channelId === '1357199605955039363')) {
             //lấy ra channel user join hiện tại
             let currentChannel = thisTime.channel
 
@@ -128,7 +128,6 @@ client.once('clientReady', async () => {
                 console.log(`Cleanup intervals for ${user.id}`);
             }
         }
-
 
         // // Xác định user bấm vào sự kiện tạo phòng với id được quy ước như dưới 
         // if (lastTime.channel && lastTime.channel.id === '1357199605955039363') {
