@@ -100,21 +100,35 @@ client.once('clientReady', async () => {
             // muốn xóa interval thì phải có timmer, giữ nó lại truyền vào channelSession
             const timmer = countDown(user.id) // New version with database integration
 
-            currentChannel.send(`<a:a_g_Cheer:1301431655503892531>  Xin chào bạn học ${user.tag} bạn vừa tham gia VC ${currentChannel.name}, từ bây giờ nếu bạn học 1 tiếng sẽ quy đổi ra thành 1 MĐCoins! YAY !, để check balance bạn có thể dùng lệnh /balance`);
-            channelSession.set(user.id, { currentChannel, timmer, balance })
+            let minutesLeft = 60;
+            let countdownMessage = null
+            let coin = 0;
+            countdownMessage = await currentChannel.send(`<a:a_g_Cheer:...> Xin chào bạn học ${thisTime.member.displayName}! Từ bây giờ nếu bạn tham gia VC, mỗi 1 tiếng học sẽ quy đổi ra thành một 1MĐ Coin Yay ! \n Bạn còn ${minutesLeft} phút để nhận thưởng ! \n trong phiên học này bạn đã kiếm được ${coin} MĐCoin!`);
+            const countdownTimer = setInterval(async () => {
+                minutesLeft--
+                await countdownMessage.edit(`<a:a_g_Cheer:...> Xin chào bạn học ${thisTime.member.displayName}! Từ bây giờ nếu bạn tham gia VC, mỗi 1 tiếng học sẽ quy đổi ra thành một 1MĐ Coin Yay ! \n Bạn còn ${minutesLeft} phút để nhận thưởng ! \n trong phiên học này bạn đã kiếm được ${coin} MĐCoin!`);
+
+                if (minutesLeft === 0) {
+                    coin++
+                    await currentChannel.send(`🎉 ${thisTime.member.displayName} +1 MĐCoin!`);
+                    minutesLeft = 60; // Reset để đếm tiếp
+                }
+            }, 60 * 1000);
+
+            channelSession.set(user.id, { currentChannel, timmer, balance, countdownTimer })
         }
 
         // User rời voice
         if (lastTime.channelId && !thisTime.channelId) {
-            const data = channelSession.get(user.id)
-            console.log(data)
+            const data = channelSession.get(user.id);
             if (data) {
-                // console.log('session',channelSession.get()) // Old debug log
-                clearInterval(data.timmer)
+                clearInterval(data.countdownTimer); // stop UI countdown
+                clearInterval(data.timmer);         // stop DB update
                 channelSession.delete(user.id);
+                console.log(`Cleanup intervals for ${user.id}`);
             }
-
         }
+
 
         // // Xác định user bấm vào sự kiện tạo phòng với id được quy ước như dưới 
         // if (lastTime.channel && lastTime.channel.id === '1357199605955039363') {

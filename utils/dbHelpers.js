@@ -2,12 +2,15 @@ const { pool } = require('../db/database');
 
 // User-related database operations
 class UserService {
+     constructor() {
+        this.pool = pool; // Dùng chung pool
+    }
+
     // Tạo user mới hoặc lấy user hiện có
     static async getOrCreateUser(userId, username = null) {
-        const client = await pool.connect();
         try {
             // Kiểm tra user đã tồn tại chưa
-            const existingUser = await client.query(
+            const existingUser = await pool.query(
                 'SELECT * FROM users WHERE user_id = $1',
                 [userId]
             );
@@ -36,9 +39,8 @@ class UserService {
 
     // Lấy thông tin balance của user
     static async getUserBalance(userId) {
-        const client = await pool.connect();
         try {
-            const result = await client.query(
+            const result = await pool.query(
                 'SELECT balance, balance_vip, total_earned, total_earned_vip FROM users WHERE user_id = $1',
                 [userId]
             );
@@ -57,12 +59,11 @@ class UserService {
     }
     // Transfer coins từ user này sang user khác
     static async transferCoins(fromUserId, toUserId, amount, reason = null) {
-        const client = await pool.connect();
         try {
             await client.query('BEGIN');
 
             // Kiểm tra người gửi có đủ balance không
-            const fromUser = await client.query(
+            const fromUser = await pool.query(
                 'SELECT balance FROM users WHERE user_id = $1',
                 [fromUserId]
             );
@@ -113,14 +114,13 @@ class UserService {
 
     // Lấy leaderboard
     static async getLeaderboard(orderBy = 'balance', limit = 10) {
-        const client = await pool.connect();
         try {
             const validColumns = ['balance', 'total_earned'];
             if (!validColumns.includes(orderBy)) {
                 orderBy = 'balance';
             }
 
-            const result = await client.query(
+            const result = await pool.query(
                 `SELECT user_id, balance, total_earned
                  FROM users
                  WHERE balance > 0 OR total_earned > 0
@@ -140,9 +140,8 @@ class UserService {
 
     // Lấy transaction history của user
     static async getUserTransactions(userId, limit = 10) {
-        const client = await pool.connect();
         try {
-            const result = await client.query(
+            const result = await pool.query(
                 `SELECT * FROM transactions
                  WHERE from_user_id = $1 OR to_user_id = $1
                  ORDER BY created_at DESC
@@ -161,9 +160,8 @@ class UserService {
 
     // Cập nhật balance của user (voice earning)
     static async addVoiceEarnings(userId, amount) {
-        const client = await pool.connect();
         try {
-            await client.query('BEGIN');
+            await pool.query('BEGIN');
 
             // Đảm bảo user tồn tại
             await this.getOrCreateUser(userId);
@@ -200,9 +198,8 @@ class UserService {
 
     // Lấy thông tin daily checkin của user
     static async getDailyCheckinStatus(userId) {
-        const client = await pool.connect();
         try {
-            const result = await client.query(
+            const result = await pool.query(
                 'SELECT * FROM daily_checkins WHERE user_id = $1',
                 [userId]
             );
@@ -233,9 +230,8 @@ class UserService {
 
     // Xử lý daily checkin và tính toán streak
     static async processDailyCheckin(userId) {
-        const client = await pool.connect();
         try {
-            await client.query('BEGIN');
+            await pool.query('BEGIN');
 
             // Đảm bảo user tồn tại
             await this.getOrCreateUser(userId);
@@ -315,10 +311,9 @@ class UserService {
 
     // Thêm MĐCoins từ daily reward
     static async addDailyReward(userId, amount) {
-        const client = await pool.connect();
         try {
             // Cập nhật balance và total_earned
-            await client.query(
+            await pool.query(
                 `UPDATE users
                  SET balance = balance + $2,
                      total_earned = total_earned + $2,
@@ -346,14 +341,13 @@ class UserService {
 
     // Lấy daily checkin leaderboard
     static async getDailyCheckinLeaderboard(orderBy = 'current_streak', limit = 10) {
-        const client = await pool.connect();
         try {
             const validColumns = ['current_streak', 'total_checkins'];
             if (!validColumns.includes(orderBy)) {
                 orderBy = 'current_streak';
             }
 
-            const result = await client.query(
+            const result = await pool.query(
                 `SELECT dc.user_id, dc.current_streak, dc.total_checkins, dc.last_checkin_date
                  FROM daily_checkins dc
                  ORDER BY dc.${orderBy} DESC
