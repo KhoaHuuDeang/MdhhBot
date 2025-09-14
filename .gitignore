@@ -1,0 +1,11 @@
+node_modules/
+.env
+*.log
+.DS_Store
+
+.claude.md
+.claude/CLAUDE.md
+note.txt
+Error.md
+aiven-ca.pem
+.claude/settings.local.json
