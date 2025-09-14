@@ -59,10 +59,11 @@ class UserService {
     // Transfer coins từ user này sang user khác
     static async transferCoins(fromUserId, toUserId, amount, reason = null) {
         try {
+            const client = await dbInstance.getClient();
             await client.query('BEGIN');
 
             // Kiểm tra người gửi có đủ balance không
-            const fromUser = await pool.query(
+            const fromUser = await client.query(
                 'SELECT balance FROM users WHERE user_id = $1',
                 [fromUserId]
             );
@@ -106,8 +107,6 @@ class UserService {
             await client.query('ROLLBACK');
             console.error('Error in transferCoins:', error);
             throw error;
-        } finally {
-            client.release();
         }
     }
 
@@ -119,28 +118,28 @@ class UserService {
                 orderBy = 'balance';
             }
 
-            const result = await pool.query(
+            const result = await client.query(
                 `SELECT user_id, balance, total_earned
                  FROM users
-                 WHERE balance > 0 OR total_earned > 0
+                 WHERE (balance > 0 OR total_earned > 0)
+                   AND user_id != $1
                  ORDER BY ${orderBy} DESC
-                 LIMIT $1`,
-                [limit]
+                 LIMIT $2`,
+                ['1344241813074083913', limit]
             );
 
             return result.rows;
         } catch (error) {
             console.error('Error in getLeaderboard:', error);
             throw error;
-        } finally {
-            client.release();
         }
     }
 
     // Lấy transaction history của user
     static async getUserTransactions(userId, limit = 10) {
         try {
-            const result = await pool.query(
+            const client = await dbInstance.getClient();
+            const result = await client.query(
                 `SELECT * FROM transactions
                  WHERE from_user_id = $1 OR to_user_id = $1
                  ORDER BY created_at DESC
@@ -152,15 +151,14 @@ class UserService {
         } catch (error) {
             console.error('Error in getUserTransactions:', error);
             throw error;
-        } finally {
-            client.release();
         }
     }
 
     // Cập nhật balance của user (voice earning)
     static async addVoiceEarnings(userId, amount) {
         try {
-            await pool.query('BEGIN');
+            const client = await dbInstance.getClient();
+            await client.query('BEGIN');
 
             // Đảm bảo user tồn tại
             await this.getOrCreateUser(userId);
@@ -188,8 +186,6 @@ class UserService {
         } catch (error) {
             await client.query('ROLLBACK');
             throw error;
-        } finally {
-            client.release();
         }
     }
 
@@ -198,7 +194,8 @@ class UserService {
     // Lấy thông tin daily checkin của user
     static async getDailyCheckinStatus(userId) {
         try {
-            const result = await pool.query(
+            const client = await dbInstance.getClient();
+            const result = await client.query(
                 'SELECT * FROM daily_checkins WHERE user_id = $1',
                 [userId]
             );
@@ -222,15 +219,14 @@ class UserService {
         } catch (error) {
             console.error('Error in getDailyCheckinStatus:', error);
             throw error;
-        } finally {
-            client.release();
         }
     }
 
     // Xử lý daily checkin và tính toán streak
     static async processDailyCheckin(userId) {
         try {
-            await pool.query('BEGIN');
+            const client = await dbInstance.getClient();
+            await client.query('BEGIN');
 
             // Đảm bảo user tồn tại
             await this.getOrCreateUser(userId);
@@ -303,16 +299,15 @@ class UserService {
             await client.query('ROLLBACK');
             console.error('Error in processDailyCheckin:', error);
             throw error;
-        } finally {
-            client.release();
         }
     }
 
     // Thêm MĐCoins từ daily reward
     static async addDailyReward(userId, amount) {
         try {
+            const client = await dbInstance.getClient();
             // Cập nhật balance và total_earned
-            await pool.query(
+            await client.query(
                 `UPDATE users
                  SET balance = balance + $2,
                      total_earned = total_earned + $2,
@@ -333,8 +328,6 @@ class UserService {
         } catch (error) {
             console.error('Error in addDailyReward:', error);
             throw error;
-        } finally {
-            client.release();
         }
     }
 
@@ -346,20 +339,20 @@ class UserService {
                 orderBy = 'current_streak';
             }
 
-            const result = await pool.query(
+            const client = await dbInstance.getClient();
+            const result = await client.query(
                 `SELECT dc.user_id, dc.current_streak, dc.total_checkins, dc.last_checkin_date
                  FROM daily_checkins dc
+                 WHERE dc.user_id != $1
                  ORDER BY dc.${orderBy} DESC
-                 LIMIT $1`,
-                [limit]
+                 LIMIT $2`,
+                ['1344241813074083913', limit]
             );
 
             return result.rows;
         } catch (error) {
             console.error('Error in getDailyCheckinLeaderboard:', error);
             throw error;
-        } finally {
-            client.release();
         }
     }
 }
