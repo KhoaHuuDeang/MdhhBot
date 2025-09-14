@@ -100,7 +100,7 @@ class UserService {
             );
 
             await client.query('COMMIT');
-            console.log(`💸 ${fromUserId} gifted ${amount} SCP to ${toUserId}`);
+            console.log(`💸 ${fromUserId} gifted ${amount} MĐ Coin to ${toUserId}`);
 
             return true;
         } catch (error) {

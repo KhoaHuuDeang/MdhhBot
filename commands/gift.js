@@ -166,7 +166,7 @@ module.exports = {
             await interaction.editReply({ embeds: [successEmbed] });
 
             // Log transaction
-            console.log(`🎁 Gift transaction: ${sender.username} (${sender.id}) -> ${recipient.username} (${recipient.id}): ${amount} SCP`);
+            console.log(`🎁 Gift transaction: ${sender.username} (${sender.id}) -> ${recipient.username} (${recipient.id}): ${amount} MĐ Coin`);
 
         } catch (error) {
             console.error('Error in gift command:', error);
