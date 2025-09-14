@@ -9,3 +9,7 @@ note.txt
 Error.md
 aiven-ca.pem
 .claude/settings.local.json
+mcp-server/database-server.js
+.claude/mcp-config.json
+test-mcp.js
+BOT_GUIDE.md
