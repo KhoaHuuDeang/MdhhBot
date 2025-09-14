@@ -78,6 +78,7 @@ client.once('clientReady', async () => {
 
     // Lắng nghe sự kiện voice
     client.on('voiceStateUpdate', async (lastTime, thisTime) => {
+        console.log(`Voice state updated: ${lastTime.channelId} -> ${thisTime.channelId}`);
         // ...existing code...
         // Lấy user trong discord
         const user = thisTime.member.user
