@@ -40,18 +40,33 @@ async function initializeDatabase() {
             CREATE TABLE IF NOT EXISTS users (
                 user_id VARCHAR(20) PRIMARY KEY,
                 balance INTEGER DEFAULT 0,
+                balance_vip INTEGER DEFAULT 0,
                 total_earned INTEGER DEFAULT 0,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                total_earned_vip INTEGER DEFAULT 0,
+                created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
             )
         `);
 
-        // Create transaction types enum
+        // Create transaction types enum (if not exists) and add new value
         await client.query(`
             DO $$ BEGIN
-                CREATE TYPE transaction_type AS ENUM ('voice_earn', 'gift', 'admin');
+                CREATE TYPE transaction_type AS ENUM ('voice_earn', 'gift', 'admin', 'coin_vip');
             EXCEPTION
                 WHEN duplicate_object THEN null;
+            END $$;
+        `);
+
+        // Safely add new enum values if they don't exist (EXTENDS ENUM)
+        await client.query(`
+            DO $$ BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM pg_enum
+                    WHERE enumlabel = 'daily_checkin'
+                    AND enumtypid = (SELECT oid FROM pg_type WHERE typname = 'transaction_type')
+                ) THEN
+                    ALTER TYPE transaction_type ADD VALUE 'daily_checkin';
+                END IF;
             END $$;
         `);
 
@@ -64,7 +79,19 @@ async function initializeDatabase() {
                 amount INTEGER NOT NULL,
                 type transaction_type NOT NULL,
                 description TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+
+        // Create daily_checkins table
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS daily_checkins (
+                user_id VARCHAR(20) PRIMARY KEY,
+                last_checkin_date DATE NOT NULL,
+                current_streak INTEGER DEFAULT 1,
+                total_checkins INTEGER DEFAULT 0,
+                created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
             )
         `);
 
@@ -75,6 +102,8 @@ async function initializeDatabase() {
             CREATE INDEX IF NOT EXISTS idx_transactions_to_user ON transactions(to_user_id);
             CREATE INDEX IF NOT EXISTS idx_transactions_from_user ON transactions(from_user_id);
             CREATE INDEX IF NOT EXISTS idx_transactions_created_at ON transactions(created_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_daily_checkins_date ON daily_checkins(last_checkin_date DESC);
+            CREATE INDEX IF NOT EXISTS idx_daily_checkins_streak ON daily_checkins(current_streak DESC);
         `);
 
         console.log('✅ Database tables initialized successfully');

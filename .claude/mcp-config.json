@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "discord-bot-db": {
+      "command": "node",
+      "args": ["./mcp-server/database-server.js"],
+      "cwd": "E:\\bot"
+    }
+  }
+}

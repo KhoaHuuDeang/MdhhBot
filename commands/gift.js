@@ -142,7 +142,7 @@ module.exports = {
                 },
                 {
                     name: '📈 Ý Nghĩa',
-                    value: `Tương đương ~${Math.floor(amount / 12 / 60)} giờ học`,
+                    value: `Tương đương ~${Math.floor(amount / 720)} giờ học`,
                     inline: true
                 }
             );

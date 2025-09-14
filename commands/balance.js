@@ -32,12 +32,12 @@ module.exports = {
                     .addFields(
                         {
                             name: '💎 Balance Hiện Tại',
-                            value: '**0 MĐC**',
+                            value: '**0 MĐCoin | 0 MĐV**',
                             inline: false
                         },
                         {
                             name: '🎯 Bắt Đầu Ngay',
-                            value: '• Tham gia voice channel học tập\n• Kiếm 1 MĐC mỗi 1 giờ\n• Xây dựng thói quen học tập tốt',
+                            value: '• Tham gia voice channel học tập\n• Kiếm MĐCoin mỗi 1 giờ\n• Xây dựng thói quen học tập tốt',
                             inline: false
                         }
                     )
@@ -49,13 +49,15 @@ module.exports = {
                 return;
             }
 
-            // Calculate spent amount
+            // Calculate spent amounts
             const spentAmount = userBalance.total_earned - userBalance.balance;
+            const spentAmountVip = userBalance.total_earned_vip - userBalance.balance_vip;
 
             // Tạo embed hiển thị thông tin balance với design mới
             const embed = new EmbedBuilder()
                 .setColor('#386641') // Primary green for financial info
-                .setTitle(`💰 MĐCoins ${targetUser.username} đang có : **${userBalance.balance.toLocaleString()} MĐC** `)
+                .setTitle(`💰 Balance của ${targetUser.username}`)
+                .setDescription(`💎 **${userBalance.balance.toLocaleString()} MĐCoin** | 🌟 **${userBalance.balance_vip.toLocaleString()} MĐV**`)
                 .setThumbnail(targetUser.displayAvatarURL())
                 .setTimestamp()
                 .setFooter({
@@ -63,31 +65,31 @@ module.exports = {
                     iconURL: 'https://cdn.discordapp.com/emojis/1234567890.png' // Optional: study icon
                 });
 
-            // Add secondary information in softer green
+            // Add secondary information
             embed.addFields(
                 {
                     name: '📈 Tổng Đã Kiếm',
-                    value: `${userBalance.total_earned.toLocaleString()} MĐC`,
+                    value: `${userBalance.total_earned.toLocaleString()} MĐCoin\n${userBalance.total_earned_vip.toLocaleString()} MĐV`,
                     inline: true
                 },
                 {
                     name: '📊 Đã Sử Dụng',
-                    value: `${spentAmount.toLocaleString()} MĐC`,
+                    value: `${spentAmount.toLocaleString()} MĐCoin\n${spentAmountVip.toLocaleString()} MĐV`,
                     inline: true
                 },
                 {
                     name: '⏱️ Thời Gian Học',
-                    value: `~${Math.floor(userBalance.total_earned / 12)} phút`,
+                    value: `~${Math.floor(userBalance.total_earned / 720)} giờ`,
                     inline: true
                 }
             );
 
             // Thêm thông tin hướng dẫn cho người dùng mới
-            if (isOwnBalance && userBalance.balance === 0) {
+            if (isOwnBalance && userBalance.balance === 0 && userBalance.balance_vip === 0) {
                 embed.setColor('#6A994E'); // Softer green for new users
                 embed.addFields({
                     name: '🎓 Hướng Dẫn Kiếm MĐCoin',
-                    value: '• Tham gia bất kỳ VC học tập nào trên hệ thống (1 MĐC/1h)\n• Nhận gift từ các thành viên khác\n• Tích cực tham gia hoạt động cộng đồng',
+                    value: '• Tham gia bất kỳ VC học tập nào trên hệ thống (MĐCoin/1h)\n• Nhận gift từ các thành viên khác\n• Tích cực tham gia hoạt động cộng đồng',
                     inline: false
                 });
             }
