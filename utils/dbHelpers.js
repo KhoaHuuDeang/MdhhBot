@@ -83,10 +83,12 @@ class UserService {
                 [fromUserId, amount]
             );
 
-            // Cộng tiền người nhận
+            // Cộng tiền người nhận (cả balance và total_earned)
             await client.query(
                 `UPDATE users
-                 SET balance = balance + $2, updated_at = CURRENT_TIMESTAMP
+                 SET balance = balance + $2,
+                     total_earned = total_earned + $2,
+                     updated_at = CURRENT_TIMESTAMP
                  WHERE user_id = $1`,
                 [toUserId, amount]
             );
