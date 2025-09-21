@@ -62,11 +62,19 @@ module.exports = {
                 const user = leaderboard[i];
                 const position = i + 1;
 
-                // Cố gắng lấy username từ Discord client
-                let username = user.user_id;
+                // Lấy username từ Discord client
+                // let username = user.user_id;
+                const guild = interaction.guild;
                 try {
+                    const member = guild.members.cache.get(user.user_id);
                     const discordUser = await interaction.client.users.fetch(user.user_id);
                     username = discordUser.username;
+                    if (member) {
+                        username = member.displayName;
+                    } else {
+                        const discordUser = await interaction.client.users.fetch(user.user_id);
+                        username = discordUser.username;
+                    }
                 } catch (error) {
                     // Nếu không lấy được username, giữ nguyên user_id
                     username = `User ${user.user_id.slice(-4)}`;
@@ -75,7 +83,7 @@ module.exports = {
                 const value = type === 'balance' ? user.balance : user.total_earned;
                 const displayValue = type === 'balance' ?
                     `${value.toLocaleString()} MĐC` :
-                    `${value.toLocaleString()} MĐC (~${Math.floor(value/12)} phút)`;
+                    `${value.toLocaleString()} MĐC (~${Math.floor(value / 12)} phút)`;
 
                 if (position <= 3) {
                     // Top 3 get special treatment
@@ -128,7 +136,7 @@ module.exports = {
                     if (!userInTop && currentUserValue > 0) {
                         const displayValue = type === 'balance' ?
                             `${currentUserValue.toLocaleString()} MĐC` :
-                            `${currentUserValue.toLocaleString()} MĐC (~${Math.floor(currentUserValue/12)} phút)`;
+                            `${currentUserValue.toLocaleString()} MĐC (~${Math.floor(currentUserValue / 12)} phút)`;
 
                         embed.addFields({
                             name: '📍 Vị Trí Của Bạn',
