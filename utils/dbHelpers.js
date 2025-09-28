@@ -56,8 +56,9 @@ class UserService {
     }
     // Transfer coins từ user này sang user khác
     static async transferCoins(fromUserId, toUserId, amount, reason = null) {
+        let client;
         try {
-            const client = await dbInstance.getClient();
+            client = await dbInstance.getClient();
             await client.query('BEGIN');
 
             // Kiểm tra người gửi có đủ balance không
@@ -104,23 +105,29 @@ class UserService {
 
             return true;
         } catch (error) {
-            await client.query('ROLLBACK');
+            if (client) await client.query('ROLLBACK');
             console.error('Error in transferCoins:', error);
             throw error;
+        } finally {
+            if (client) {
+                try {
+                    client.release();
+                } catch (releaseError) {
+                    console.error('❌ Error releasing client:', releaseError);
+                }
+            }
         }
     }
 
     // Lấy leaderboard
     static async getLeaderboard(orderBy = 'balance', limit = 10) {
         try {
-            const client = await dbInstance.getClient();
             const validColumns = ['balance', 'total_earned'];
             if (!validColumns.includes(orderBy)) orderBy = 'balance';
 
             const excludeIds = process.env.LEADERBOARD_EXCLUDE_IDS
                 ? process.env.LEADERBOARD_EXCLUDE_IDS.split(',').map(id => id.trim())
                 : [];
-
 
             const placeholders = excludeIds.map((_, i) => `$${i + 1}`).join(',');
             const limitPlaceholder = `$${excludeIds.length + 1}`;
@@ -135,7 +142,7 @@ class UserService {
         `;
 
             const params = [...excludeIds, limit];
-            const result = await client.query(sql, params);
+            const result = await pool.query(sql, params);
 
             return result.rows;
         } catch (error) {
@@ -147,8 +154,7 @@ class UserService {
     // Lấy transaction history của user
     static async getUserTransactions(userId, limit = 10) {
         try {
-            const client = await dbInstance.getClient();
-            const result = await client.query(
+            const result = await pool.query(
                 `SELECT * FROM transactions
                  WHERE from_user_id = $1 OR to_user_id = $1
                  ORDER BY created_at DESC
@@ -165,8 +171,9 @@ class UserService {
 
     // Cập nhật balance của user (voice earning)
     static async addVoiceEarnings(userId, amount) {
+        let client;
         try {
-            const client = await dbInstance.getClient();
+            client = await dbInstance.getClient();
             await client.query('BEGIN');
 
             // Đảm bảo user tồn tại
@@ -193,8 +200,16 @@ class UserService {
             await client.query('COMMIT');
             return result.rows[0]
         } catch (error) {
-            await client.query('ROLLBACK');
+            if (client) await client.query('ROLLBACK');
             throw error;
+        } finally {
+            if (client) {
+                try {
+                    client.release();
+                } catch (releaseError) {
+                    console.error('❌ Error releasing client:', releaseError);
+                }
+            }
         }
     }
 
@@ -203,8 +218,7 @@ class UserService {
     // Lấy thông tin daily checkin của user
     static async getDailyCheckinStatus(userId) {
         try {
-            const client = await dbInstance.getClient();
-            const result = await client.query(
+            const result = await pool.query(
                 'SELECT * FROM daily_checkins WHERE user_id = $1',
                 [userId]
             );
@@ -233,8 +247,9 @@ class UserService {
 
     // Xử lý daily checkin và tính toán streak
     static async processDailyCheckin(userId) {
+        let client;
         try {
-            const client = await dbInstance.getClient();
+            client = await dbInstance.getClient();
             await client.query('BEGIN');
 
             // Đảm bảo user tồn tại
@@ -305,9 +320,17 @@ class UserService {
             };
 
         } catch (error) {
-            await client.query('ROLLBACK');
+            if (client) await client.query('ROLLBACK');
             console.error('Error in processDailyCheckin:', error);
             throw error;
+        } finally {
+            if (client) {
+                try {
+                    client.release();
+                } catch (releaseError) {
+                    console.error('❌ Error releasing client:', releaseError);
+                }
+            }
         }
     }
 
