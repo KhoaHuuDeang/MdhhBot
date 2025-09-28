@@ -15,6 +15,17 @@ module.exports = {
             const targetUser = interaction.options.getUser('user') || interaction.user;
             const isOwnStats = targetUser.id === interaction.user.id;
             
+            // Lấy member objects để có displayName
+            let targetMember;
+            if (isOwnStats) {
+                targetMember = interaction.member;
+            } else {
+                targetMember = await interaction.guild.members.fetch(targetUser.id).catch(() => null);
+            }
+            
+            const targetDisplayName = targetMember?.displayName || targetUser.username;
+            const currentUserDisplayName = interaction.member?.displayName || interaction.user.username;
+            
             await interaction.deferReply({ ephemeral: isOwnStats });
 
             // Get invite manager instance (we'll need to access it from the client)
@@ -32,7 +43,7 @@ module.exports = {
             // Create embed
             const embed = new EmbedBuilder()
                 .setColor(isOwnStats ? 0x00ff00 : 0x3498db)
-                .setTitle(`📊 Thống Kê Invite${isOwnStats ? '' : ` - ${targetUser.tag}`}`)
+                .setTitle(`📊 Thống Kê Invite${isOwnStats ? '' : ` - ${targetDisplayName}`}`)
                 .setThumbnail(targetUser.displayAvatarURL())
                 .addFields(
                     { 
@@ -52,7 +63,7 @@ module.exports = {
                     }
                 )
                 .setFooter({ 
-                    text: isOwnStats ? 'Sử dụng /invite để tạo link mời mới!' : `Requested by ${interaction.user.tag}`,
+                    text: isOwnStats ? 'Sử dụng /invite để tạo link mời mới!' : `Requested by ${currentUserDisplayName}`,
                     iconURL: interaction.user.displayAvatarURL()
                 })
                 .setTimestamp();
@@ -119,7 +130,7 @@ module.exports = {
 
             await interaction.editReply({ embeds: [embed] });
 
-            console.log(`✅ ${interaction.user.tag} checked invite stats for ${targetUser.tag}: ${stats.totalInvites} invites, ${stats.totalRewards} rewards`);
+            console.log(`✅ ${currentUserDisplayName} checked invite stats for ${targetDisplayName}: ${stats.totalInvites} invites, ${stats.totalRewards} rewards`);
 
         } catch (error) {
             console.error('❌ Error getting invite stats:', error);

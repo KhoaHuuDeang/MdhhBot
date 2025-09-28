@@ -31,6 +31,14 @@ module.exports = {
             const amount = interaction.options.getInteger('amount');
             const reason = interaction.options.getString('reason');
 
+            // Lấy member objects để có displayName
+            const senderMember = interaction.member;
+            const recipientMember = await interaction.guild.members.fetch(recipient.id).catch(() => null);
+
+            // Sử dụng displayName thay vì username
+            const senderName = senderMember?.displayName || sender.username;
+            const recipientName = recipientMember?.displayName || recipient.username;
+
             // Defer reply để có thời gian xử lý
             await interaction.deferReply();
 
@@ -121,7 +129,7 @@ module.exports = {
                 .addFields(
                     {
                         name: '🤝 Thông Tin Giao Dịch',
-                        value: `**${sender.username}** → **${recipient.username}**\n💰 **${amount.toLocaleString()} MĐC**`,
+                        value: `**${senderName}** → **${recipientName}**\n💰 **${amount.toLocaleString()} MĐC**`,
                         inline: false
                     }
                 )
@@ -132,12 +140,12 @@ module.exports = {
             successEmbed.addFields(
                 {
                     name: '👤 Người Tặng',
-                    value: `${sender.username}\n💎 Còn lại: **${newSenderBalance.balance.toLocaleString()} MĐC**`,
+                    value: `${senderName}\n💎 Còn lại: **${newSenderBalance.balance.toLocaleString()} MĐC**`,
                     inline: true
                 },
                 {
                     name: '🎯 Người Nhận',
-                    value: `${recipient.username}\n🆔 ${recipient.id.slice(-4)}...`,
+                    value: `${recipientName}\n🆔 ${recipient.id.slice(-4)}...`,
                     inline: true
                 },
                 {
@@ -166,7 +174,7 @@ module.exports = {
             await interaction.editReply({ embeds: [successEmbed] });
 
             // Log transaction
-            console.log(`🎁 Gift transaction: ${sender.username} (${sender.id}) -> ${recipient.username} (${recipient.id}): ${amount} MĐ Coin`);
+            console.log(`🎁 Gift transaction: ${senderName} (${sender.id}) -> ${recipientName} (${recipient.id}): ${amount} MĐ Coin`);
 
         } catch (error) {
             console.error('Error in gift command:', error);

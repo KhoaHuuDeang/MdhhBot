@@ -1,4 +1,4 @@
-const { dbInstance, pool } = require('../db/database');
+const { pool } = require('../db/database');
 const UserService = require('./dbHelpers');
 
 class InviteManager {
@@ -51,9 +51,8 @@ class InviteManager {
      * @param {Collection} discordInvites - Discord invites collection
      */
     async syncCacheWithDatabase(discordInvites) {
-        let client;
+        const client = await pool.connect();
         try {
-            client = await dbInstance.getClient();
             await client.query('BEGIN');
 
             // Update database with current Discord invites
@@ -80,17 +79,11 @@ class InviteManager {
             console.log(`📊 Synced ${discordInvites.size} invites with database`);
 
         } catch (error) {
-            if (client) await client.query('ROLLBACK');
+            await client.query('ROLLBACK');
             console.error('❌ Error syncing invites with database:', error);
             throw error;
         } finally {
-            if (client) {
-                try {
-                    client.release();
-                } catch (releaseError) {
-                    console.error('❌ Error releasing client:', releaseError);
-                }
-            }
+            client.release();
         }
     }
 
@@ -199,9 +192,8 @@ class InviteManager {
             await UserService.addInviteReward(inviter.id, rewardAmount, description);
 
             // Record invite reward in invite_rewards table and update invite uses (cần transaction)
-            let client;
+            const client = await pool.connect();
             try {
-                client = await dbInstance.getClient();
                 await client.query('BEGIN');
 
                 await client.query(`
@@ -218,16 +210,10 @@ class InviteManager {
                 await client.query('COMMIT');
                 
             } catch (error) {
-                if (client) await client.query('ROLLBACK');
+                await client.query('ROLLBACK');
                 throw error;
             } finally {
-                if (client) {
-                    try {
-                        client.release();
-                    } catch (releaseError) {
-                        console.error('❌ Error releasing client:', releaseError);
-                    }
-                }
+                client.release();
             }
             
             console.log(`💰 Rewarded ${inviter.tag} with ${rewardAmount} MĐCoin for invite ${inviteCode}`);

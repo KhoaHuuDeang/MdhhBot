@@ -9,6 +9,10 @@ module.exports = {
     async execute(interaction) {
         try {
             const user = interaction.user;
+            
+            // Lấy member object để có displayName
+            const member = interaction.member;
+            const displayName = member?.displayName || user.username;
 
             // Defer reply để có thời gian xử lý
             await interaction.deferReply();
@@ -21,7 +25,7 @@ module.exports = {
                 const embed = new EmbedBuilder()
                     .setColor('#FF6B6B')
                     .setTitle('<:p_leave:1288881029460918407> Đã Điểm Danh Hôm Nay!')
-                    .setDescription('<:a_g_neko_cute:1301431735375892521> Bạn đã điểm danh hôm nay rồi. Hãy quay lại vào ngày mai!')
+                    .setDescription(`<:a_g_neko_cute:1301431735375892521> **${displayName}**, bạn đã điểm danh hôm nay rồi. Hãy quay lại vào ngày mai!`)
                     .addFields(
                         {
                             name: '🔥 Streak Hiện Tại',
@@ -70,7 +74,7 @@ module.exports = {
             const embed = new EmbedBuilder()
                 .setColor('#386641')
                 .setTitle('<:p_henlo_frens:1288881010729025537> Điểm Danh Thành Công!')
-                .setDescription(`Chào mừng ngày mới! Bạn nhận được **${result.reward} MĐCoin** 🪙`)
+                .setDescription(`Chào mừng ngày mới **${displayName}**! Bạn nhận được **${result.reward} MĐCoin** 🪙`)
                 .addFields(
                     {
                         name: '🔥 Streak Hiện Tại',

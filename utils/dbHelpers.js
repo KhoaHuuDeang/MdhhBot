@@ -1,4 +1,4 @@
-const { dbInstance, pool } = require('../db/database');
+const { pool } = require('../db/database');
 
 // User-related database operations
 class UserService {
@@ -7,10 +7,12 @@ class UserService {
     }
 
     // Tạo user mới hoặc lấy user hiện có
-    static async getOrCreateUser(userId, username = null) {
+    static async getOrCreateUser(userId, username = null, client = null) {
         try {
-            // Kiểm tra user đã tồn tại chưa - dùng pool.query() cho operation đơn giản
-            const existingUser = await pool.query(
+            const queryClient = client || pool;
+            
+            // Kiểm tra user đã tồn tại chưa
+            const existingUser = await queryClient.query(
                 'SELECT * FROM users WHERE user_id = $1',
                 [userId]
             );
@@ -19,8 +21,8 @@ class UserService {
                 return existingUser.rows[0];
             }
 
-            // Tạo user mới - dùng pool.query() cho operation đơn giản
-            const newUser = await pool.query(
+            // Tạo user mới
+            const newUser = await queryClient.query(
                 `INSERT INTO users (user_id, balance, balance_vip, total_earned, total_earned_vip)
                  VALUES ($1, 0, 0, 0, 0)
                  RETURNING *`,
@@ -56,9 +58,8 @@ class UserService {
     }
     // Transfer coins từ user này sang user khác
     static async transferCoins(fromUserId, toUserId, amount, reason = null) {
-        let client;
+        const client = await pool.connect();
         try {
-            client = await dbInstance.getClient();
             await client.query('BEGIN');
 
             // Kiểm tra người gửi có đủ balance không
@@ -71,8 +72,8 @@ class UserService {
                 throw new Error('Insufficient balance');
             }
 
-            // Đảm bảo người nhận tồn tại
-            await this.getOrCreateUser(toUserId);
+            // Đảm bảo người nhận tồn tại - truyền client vào để cùng transaction
+            await this.getOrCreateUser(toUserId, null, client);
 
             // Trừ tiền người gửi
             await client.query(
@@ -105,17 +106,11 @@ class UserService {
 
             return true;
         } catch (error) {
-            if (client) await client.query('ROLLBACK');
+            await client.query('ROLLBACK');
             console.error('Error in transferCoins:', error);
             throw error;
         } finally {
-            if (client) {
-                try {
-                    client.release();
-                } catch (releaseError) {
-                    console.error('❌ Error releasing client:', releaseError);
-                }
-            }
+            client.release();
         }
     }
 
@@ -171,13 +166,12 @@ class UserService {
 
     // Cập nhật balance của user (voice earning)
     static async addVoiceEarnings(userId, amount) {
-        let client;
+        const client = await pool.connect();
         try {
-            client = await dbInstance.getClient();
             await client.query('BEGIN');
 
-            // Đảm bảo user tồn tại
-            await this.getOrCreateUser(userId);
+            // Đảm bảo user tồn tại - truyền client vào để cùng transaction
+            await this.getOrCreateUser(userId, null, client);
 
             // Cập nhật balance và total_earned
             const result = await client.query(
@@ -200,16 +194,10 @@ class UserService {
             await client.query('COMMIT');
             return result.rows[0]
         } catch (error) {
-            if (client) await client.query('ROLLBACK');
+            await client.query('ROLLBACK');
             throw error;
         } finally {
-            if (client) {
-                try {
-                    client.release();
-                } catch (releaseError) {
-                    console.error('❌ Error releasing client:', releaseError);
-                }
-            }
+            client.release();
         }
     }
 
@@ -247,13 +235,12 @@ class UserService {
 
     // Xử lý daily checkin và tính toán streak
     static async processDailyCheckin(userId) {
-        let client;
+        const client = await pool.connect();
         try {
-            client = await dbInstance.getClient();
             await client.query('BEGIN');
 
-            // Đảm bảo user tồn tại
-            await this.getOrCreateUser(userId);
+            // Đảm bảo user tồn tại - truyền client vào để cùng transaction
+            await this.getOrCreateUser(userId, null, client);
 
             const checkinStatus = await this.getDailyCheckinStatus(userId);
 
@@ -308,8 +295,8 @@ class UserService {
                 );
             }
 
-            // Add daily reward
-            await this.addDailyReward(userId, rewardAmount);
+            // Add daily reward - truyền client vào để cùng transaction
+            await this.addDailyReward(userId, rewardAmount, `Daily checkin Day ${newStreak}`, client);
 
             await client.query('COMMIT');
 
@@ -320,26 +307,21 @@ class UserService {
             };
 
         } catch (error) {
-            if (client) await client.query('ROLLBACK');
+            await client.query('ROLLBACK');
             console.error('Error in processDailyCheckin:', error);
             throw error;
         } finally {
-            if (client) {
-                try {
-                    client.release();
-                } catch (releaseError) {
-                    console.error('❌ Error releasing client:', releaseError);
-                }
-            }
+            client.release();
         }
     }
 
     // Thêm MĐCoins từ daily reward
-    static async addDailyReward(userId, amount) {
+    static async addDailyReward(userId, amount, description = null, client = null) {
         try {
-            const client = await dbInstance.getClient();
+            const queryClient = client || pool;
+            
             // Cập nhật balance và total_earned
-            await client.query(
+            await queryClient.query(
                 `UPDATE users
                  SET balance = balance + $2,
                      total_earned = total_earned + $2,
@@ -349,10 +331,10 @@ class UserService {
             );
 
             // Ghi transaction log
-            await client.query(
+            await queryClient.query(
                 `INSERT INTO transactions (to_user_id, amount, type, description)
                  VALUES ($1, $2, 'daily_checkin', $3)`,
-                [userId, amount, `Daily checkin reward - Day ${amount}`]
+                [userId, amount, description || `Daily checkin reward - Day ${amount}`]
             );
 
             console.log(`📅 ${userId} received ${amount} MĐC from daily checkin`);
@@ -371,8 +353,7 @@ class UserService {
                 orderBy = 'current_streak';
             }
 
-            const client = await dbInstance.getClient();
-            const result = await client.query(
+            const result = await pool.query(
                 `SELECT dc.user_id, dc.current_streak, dc.total_checkins, dc.last_checkin_date
                  FROM daily_checkins dc
                  WHERE dc.user_id != $1
@@ -392,13 +373,12 @@ class UserService {
 
     // Thêm MĐCoins từ invite reward
     static async addInviteReward(userId, amount, description) {
-        let client;
+        const client = await pool.connect();
         try {
-            client = await dbInstance.getClient();
             await client.query('BEGIN');
 
-            // Đảm bảo user tồn tại
-            await this.getOrCreateUser(userId);
+            // Đảm bảo user tồn tại - truyền client vào để cùng transaction
+            await this.getOrCreateUser(userId, null, client);
 
             // Cập nhật balance và total_earned
             await client.query(
@@ -422,17 +402,11 @@ class UserService {
             
             return true;
         } catch (error) {
-            if (client) await client.query('ROLLBACK');
+            await client.query('ROLLBACK');
             console.error('Error in addInviteReward:', error);
             throw error;
         } finally {
-            if (client) {
-                try {
-                    client.release();
-                } catch (releaseError) {
-                    console.error('❌ Error releasing client in addInviteReward:', releaseError);
-                }
-            }
+            client.release();
         }
     }
 }

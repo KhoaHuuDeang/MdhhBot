@@ -17,6 +17,16 @@ module.exports = {
             const targetUser = interaction.options.getUser('user') || interaction.user;
             const isOwnBalance = targetUser.id === interaction.user.id;
 
+            // Lấy member objects để có displayName
+            let targetMember;
+            if (isOwnBalance) {
+                targetMember = interaction.member;
+            } else {
+                targetMember = await interaction.guild.members.fetch(targetUser.id).catch(() => null);
+            }
+            
+            const targetDisplayName = targetMember?.displayName || targetUser.username;
+
             // Defer reply để có thời gian xử lý
             await interaction.deferReply({ ephemeral: isOwnBalance });
 
@@ -28,7 +38,7 @@ module.exports = {
                 const embed = new EmbedBuilder()
                     .setColor('#6A994E') // Softer green for welcome message
                     .setTitle('🎓 Chào Mừng Đến Study Community!')
-                    .setDescription(`${isOwnBalance ? 'Bạn' : targetUser.username} chưa bắt đầu hành trình học tập.`)
+                    .setDescription(`${isOwnBalance ? 'Bạn' : targetDisplayName} chưa bắt đầu hành trình học tập.`)
                     .addFields(
                         {
                             name: '💎 MĐCoin Hiện Tại',
@@ -56,7 +66,7 @@ module.exports = {
             // Tạo embed hiển thị thông tin balance với design mới
             const embed = new EmbedBuilder()
                 .setColor('#386641') // Primary green for financial info
-                .setTitle(`💵 MĐCoin của ${targetUser.username}`)
+                .setTitle(`💵 MĐCoin của ${targetDisplayName}`)
                 .setDescription(`💵 **${userBalance.balance.toLocaleString()} MĐCoin** | 💴 **${userBalance.balance_vip.toLocaleString()} MĐV**`)
                 .setThumbnail(targetUser.displayAvatarURL())
                 .setTimestamp()
