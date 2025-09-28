@@ -1,18 +1,16 @@
-const { dbInstance } = require('../db/database');
+const { dbInstance, pool } = require('../db/database');
 
 // User-related database operations
 class UserService {
-     constructor() {
+    constructor() {
         this.pool = pool; // Dùng chung pool
     }
 
     // Tạo user mới hoặc lấy user hiện có
     static async getOrCreateUser(userId, username = null) {
         try {
-            const client = await dbInstance.getClient();
-
-            // Kiểm tra user đã tồn tại chưa
-            const existingUser = await client.query(
+            // Kiểm tra user đã tồn tại chưa - dùng pool.query() cho operation đơn giản
+            const existingUser = await pool.query(
                 'SELECT * FROM users WHERE user_id = $1',
                 [userId]
             );
@@ -21,8 +19,8 @@ class UserService {
                 return existingUser.rows[0];
             }
 
-            // Tạo user mới
-            const newUser = await client.query(
+            // Tạo user mới - dùng pool.query() cho operation đơn giản
+            const newUser = await pool.query(
                 `INSERT INTO users (user_id, balance, balance_vip, total_earned, total_earned_vip)
                  VALUES ($1, 0, 0, 0, 0)
                  RETURNING *`,
@@ -40,8 +38,8 @@ class UserService {
     // Lấy thông tin balance của user
     static async getUserBalance(userId) {
         try {
-            const client = await dbInstance.getClient();
-            const result = await client.query(
+            // Chỉ đọc dữ liệu → dùng pool.query()
+            const result = await pool.query(
                 'SELECT balance, balance_vip, total_earned, total_earned_vip FROM users WHERE user_id = $1',
                 [userId]
             );
@@ -117,19 +115,27 @@ class UserService {
         try {
             const client = await dbInstance.getClient();
             const validColumns = ['balance', 'total_earned'];
-            if (!validColumns.includes(orderBy)) {
-                orderBy = 'balance';
-            }
+            if (!validColumns.includes(orderBy)) orderBy = 'balance';
 
-            const result = await client.query(
-                `SELECT user_id, balance, total_earned
-                 FROM users
-                 WHERE (balance > 0 OR total_earned > 0)
-                   AND user_id != $1
-                 ORDER BY ${orderBy} DESC
-                 LIMIT $2`,
-                ['1344241813074083913', limit]
-            );
+            const excludeIds = process.env.LEADERBOARD_EXCLUDE_IDS
+                ? process.env.LEADERBOARD_EXCLUDE_IDS.split(',').map(id => id.trim())
+                : [];
+
+
+            const placeholders = excludeIds.map((_, i) => `$${i + 1}`).join(',');
+            const limitPlaceholder = `$${excludeIds.length + 1}`;
+
+            const sql = `
+            SELECT user_id, balance, total_earned
+            FROM users
+            WHERE (balance > 0 OR total_earned > 0)
+              ${excludeIds.length ? `AND user_id NOT IN (${placeholders})` : ''}
+            ORDER BY ${orderBy} DESC
+            LIMIT ${limitPlaceholder}
+        `;
+
+            const params = [...excludeIds, limit];
+            const result = await client.query(sql, params);
 
             return result.rows;
         } catch (error) {
@@ -356,6 +362,54 @@ class UserService {
         } catch (error) {
             console.error('Error in getDailyCheckinLeaderboard:', error);
             throw error;
+        }
+    }
+
+    // ===== INVITE REWARD FUNCTIONS =====
+
+    // Thêm MĐCoins từ invite reward
+    static async addInviteReward(userId, amount, description) {
+        let client;
+        try {
+            client = await dbInstance.getClient();
+            await client.query('BEGIN');
+
+            // Đảm bảo user tồn tại
+            await this.getOrCreateUser(userId);
+
+            // Cập nhật balance và total_earned
+            await client.query(
+                `UPDATE users
+                 SET balance = balance + $2,
+                     total_earned = total_earned + $2,
+                     updated_at = CURRENT_TIMESTAMP
+                 WHERE user_id = $1`,
+                [userId, amount]
+            );
+
+            // Ghi transaction log
+            await client.query(
+                `INSERT INTO transactions (to_user_id, amount, type, description)
+                 VALUES ($1, $2, 'invite_reward', $3)`,
+                [userId, amount, description]
+            );
+
+            await client.query('COMMIT');
+            console.log(`🎁 ${userId} received ${amount} MĐC from invite reward`);
+            
+            return true;
+        } catch (error) {
+            if (client) await client.query('ROLLBACK');
+            console.error('Error in addInviteReward:', error);
+            throw error;
+        } finally {
+            if (client) {
+                try {
+                    client.release();
+                } catch (releaseError) {
+                    console.error('❌ Error releasing client in addInviteReward:', releaseError);
+                }
+            }
         }
     }
 }

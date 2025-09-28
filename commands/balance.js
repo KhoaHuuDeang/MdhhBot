@@ -31,7 +31,7 @@ module.exports = {
                     .setDescription(`${isOwnBalance ? 'Bạn' : targetUser.username} chưa bắt đầu hành trình học tập.`)
                     .addFields(
                         {
-                            name: '💎 Balance Hiện Tại',
+                            name: '💎 MĐCoin Hiện Tại',
                             value: '**0 MĐCoin | 0 MĐV**',
                             inline: false
                         },
@@ -56,8 +56,8 @@ module.exports = {
             // Tạo embed hiển thị thông tin balance với design mới
             const embed = new EmbedBuilder()
                 .setColor('#386641') // Primary green for financial info
-                .setTitle(`💰 Balance của ${targetUser.username}`)
-                .setDescription(`💎 **${userBalance.balance.toLocaleString()} MĐCoin** | 🌟 **${userBalance.balance_vip.toLocaleString()} MĐV**`)
+                .setTitle(`💵 MĐCoin của ${targetUser.username}`)
+                .setDescription(`💵 **${userBalance.balance.toLocaleString()} MĐCoin** | 💴 **${userBalance.balance_vip.toLocaleString()} MĐV**`)
                 .setThumbnail(targetUser.displayAvatarURL())
                 .setTimestamp()
                 .setFooter({
@@ -68,17 +68,17 @@ module.exports = {
             // Add secondary information
             embed.addFields(
                 {
-                    name: '📈 Tổng Đã Kiếm',
+                    name: '<:f_Stonks:1357212074316664842> Tổng Đã Kiếm',
                     value: `${userBalance.total_earned.toLocaleString()} MĐCoin\n${userBalance.total_earned_vip.toLocaleString()} MĐV`,
                     inline: true
                 },
                 {
-                    name: '📊 Đã Sử Dụng',
+                    name: '<:f_Stinks:1357211994473893969> Đã Sử Dụng',
                     value: `${spentAmount.toLocaleString()} MĐCoin\n${spentAmountVip.toLocaleString()} MĐV`,
                     inline: true
                 },
                 {
-                    name: '⏱️ Thời Gian Học',
+                    name: '<:f_glasses:1357211300538875945> Thời Gian Học',
                     value: `~${Math.floor(userBalance.total_earned / 720)} giờ`,
                     inline: true
                 }
@@ -88,7 +88,7 @@ module.exports = {
             if (isOwnBalance && userBalance.balance === 0 && userBalance.balance_vip === 0) {
                 embed.setColor('#6A994E'); // Softer green for new users
                 embed.addFields({
-                    name: '🎓 Hướng Dẫn Kiếm MĐCoin',
+                    name: '<:f_glasses:1357211300538875945> Hướng Dẫn Kiếm MĐCoin',
                     value: '• Tham gia bất kỳ VC học tập nào trên hệ thống (MĐCoin/1h)\n• Nhận gift từ các thành viên khác\n• Tích cực tham gia hoạt động cộng đồng',
                     inline: false
                 });
@@ -107,7 +107,7 @@ module.exports = {
                 }
 
                 embed.addFields({
-                    name: '📚 Tiến Độ Học Tập',
+                    name: '<:cute_f_shy:1365224832647827456> Tiến Độ Học Tập',
                     value: `${progressBar} ${studyHours}h`,
                     inline: false
                 });
@@ -120,7 +120,7 @@ module.exports = {
 
             const errorEmbed = new EmbedBuilder()
                 .setColor('#FF6B6B')
-                .setTitle('❌ Lỗi')
+                .setTitle('<:p_echmophat:1357210082341031956> Lỗi')
                 .setDescription('Có lỗi xảy ra khi kiểm tra balance. Vui lòng thử lại sau.')
                 .setTimestamp();
 

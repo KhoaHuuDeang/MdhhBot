@@ -5,6 +5,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const countDown = require('./utils/countDown');
+const InviteManager = require('./utils/InviteManager');
 
 const { initializeDatabase } = require('./db/database');
 const { getUserBalance } = require('./utils/dbHelpers');
@@ -18,12 +19,18 @@ const client = new Client({
         GatewayIntentBits.GuildMembers,          // Sự kiện thành viên
         GatewayIntentBits.GuildVoiceStates,      // Sự kiện voice
         GatewayIntentBits.GuildMessages,         // Đọc tin nhắn
-        GatewayIntentBits.MessageContent         // Đọc nội dung tin nhắn
+        GatewayIntentBits.MessageContent,        // Đọc nội dung tin nhắn
+        GatewayIntentBits.GuildInvites           // Theo dõi invite (NEW)
     ]
 });
 
 // Tạo collection để lưu commands
 client.commands = new Collection();
+
+// Initialize InviteManager
+const inviteManager = new InviteManager(client);
+// Expose inviteManager to client so commands can access it
+client.inviteManager = inviteManager;
 
 // Load command files
 const commandsPath = path.join(__dirname, 'commands');
@@ -69,12 +76,97 @@ client.once('clientReady', async () => {
     if (guild) {
         console.log(`✅ Bot is on  ${guild.name}`);
         console.log(`📈 Guild has ${guild.memberCount} members`);
+
+        // Initialize invite manager
+        try {
+            await inviteManager.initializeCache(guild);
+            console.log('✅ Invite manager initialized successfully');
+        } catch (error) {
+            console.error('❌ Failed to initialize invite manager:', error);
+        }
     } else {
         console.log('look like guild id not exists, please check again')
     }
 
     //khởi tạo map, lưu thông tin user 
     const channelSession = new Map()
+
+    // Event handler for new members (INVITE TRACKING)
+    client.on('guildMemberAdd', async (member) => {
+        console.log(`👋 New member joined: ${member.user.tag}`);
+
+        // Skip bots
+        if (member.user.bot) return;
+
+        try {
+            // Ensure new user exists in database
+            await UserService.getOrCreateUser(member.user.id);
+
+            // Find which invite was used
+            const usedInvite = await inviteManager.findUsedInvite(member.guild);
+
+            if (usedInvite && usedInvite.inviter) {
+                // Don't reward self-invites
+                if (usedInvite.inviter.id === member.user.id) {
+                    console.log(`🚫 Self-invite detected for ${member.user.tag}, no reward given`);
+                    return;
+                }
+
+                // Don't reward bot invites
+                if (usedInvite.inviter.bot) {
+                    console.log(`🚫 Bot invite detected (${usedInvite.inviter.tag}), no reward given`);
+                    return;
+                }
+
+                // Reward the inviter
+                await inviteManager.rewardInviter(
+                    usedInvite.inviter,
+                    member,
+                    usedInvite.code,
+                    3 // 3 MĐCoin reward
+                );
+
+                // Send welcome message with inviter mention
+                const welcomeChannel = member.guild.channels.cache.get('1420345924751855719');
+
+                if (welcomeChannel) {
+                    await welcomeChannel.send(
+                        `Chào mừng ${member} đến với ${member.guild.name}!\n` +
+                        `Được mời bởi: ${usedInvite.inviter} (+3 MĐCoin) YAY !!! \n` +
+                        `Invite code: \`${usedInvite.code}\``
+                    );
+                }
+
+                // Send private notification to inviter
+                try {
+                    await usedInvite.inviter.send(
+                        `**Chúc mừng!** Bạn vừa nhận được **3 MĐCoin** vì đã mời ${member.user.tag} tham gia server!\n` +
+                        `Invite code: \`${usedInvite.code}\``
+                    );
+                } catch (error) {
+                    console.log(`📩 Could not send DM to ${usedInvite.inviter.tag}:`, error.message);
+                }
+
+            } else {
+                console.log(`❓ Could not determine invite used by ${member.user.tag}`);
+
+                // Send generic welcome message
+                const welcomeChannel = member.guild.systemChannel ||
+                    member.guild.channels.cache.find(c => c.name.includes('welcome') || c.name.includes('general'));
+
+                if (welcomeChannel) {
+                    await welcomeChannel.send(
+                        `🎉 Chào mừng ${member} đến với ${member.guild.name}!`
+                    );
+                }
+            }
+
+        } catch (error) {
+            console.error('❌ Error processing member join for invite tracking:', error);
+        }
+    });
+
+    //khởi tạo map, lưu thông tin user
 
     // Lắng nghe sự kiện voice
     client.on('voiceStateUpdate', async (lastTime, thisTime) => {
@@ -116,7 +208,7 @@ client.once('clientReady', async () => {
                 }
             }, 60 * 1000);
 
-            channelSession.set(user.id, { currentChannel, timmer, balance, countdownTimer })
+            channelSession.set(user.id, { currentChannel, timmer, balance, countdownTimer, countdownMessage })
         }
 
         // User rời voice
@@ -126,6 +218,10 @@ client.once('clientReady', async () => {
                 clearInterval(data.countdownTimer); // stop UI countdown
                 clearInterval(data.timmer);         // stop DB update
                 channelSession.delete(user.id);
+                if (data.countdownMessage) {
+                    await data.countdownMessage.delete()
+                }
+
                 console.log(`Cleanup intervals for ${user.id}`);
             }
         }

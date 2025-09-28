@@ -20,8 +20,8 @@ module.exports = {
                 // User đã checkin hôm nay
                 const embed = new EmbedBuilder()
                     .setColor('#FF6B6B')
-                    .setTitle('⏰ Đã Điểm Danh Hôm Nay!')
-                    .setDescription('Bạn đã điểm danh hôm nay rồi. Hãy quay lại vào ngày mai!')
+                    .setTitle('<:p_leave:1288881029460918407> Đã Điểm Danh Hôm Nay!')
+                    .setDescription('<:a_g_neko_cute:1301431735375892521> Bạn đã điểm danh hôm nay rồi. Hãy quay lại vào ngày mai!')
                     .addFields(
                         {
                             name: '🔥 Streak Hiện Tại',
@@ -69,7 +69,7 @@ module.exports = {
             // Tạo embed thành công
             const embed = new EmbedBuilder()
                 .setColor('#386641')
-                .setTitle('🎉 Điểm Danh Thành Công!')
+                .setTitle('<:p_henlo_frens:1288881010729025537> Điểm Danh Thành Công!')
                 .setDescription(`Chào mừng ngày mới! Bạn nhận được **${result.reward} MĐCoin** 🪙`)
                 .addFields(
                     {

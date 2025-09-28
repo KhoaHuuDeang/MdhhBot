@@ -70,6 +70,19 @@ async function initializeDatabase() {
             END $$;
         `);
 
+        // Add invite_reward enum value
+        await client.query(`
+            DO $$ BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM pg_enum
+                    WHERE enumlabel = 'invite_reward'
+                    AND enumtypid = (SELECT oid FROM pg_type WHERE typname = 'transaction_type')
+                ) THEN
+                    ALTER TYPE transaction_type ADD VALUE 'invite_reward';
+                END IF;
+            END $$;
+        `);
+
         // Create transactions table (no foreign keys for better performance)
         await client.query(`
             CREATE TABLE IF NOT EXISTS transactions (
@@ -95,6 +108,31 @@ async function initializeDatabase() {
             )
         `);
 
+        // Create invites table for tracking invite usage
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS invites (
+                code VARCHAR(10) PRIMARY KEY,
+                inviter_id VARCHAR(20) NOT NULL,
+                uses INTEGER DEFAULT 0,
+                max_uses INTEGER DEFAULT 0,
+                expires_at TIMESTAMPTZ,
+                created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+
+        // Create invite_rewards table for tracking who got rewarded for which invite
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS invite_rewards (
+                id SERIAL PRIMARY KEY,
+                inviter_id VARCHAR(20) NOT NULL,
+                invitee_id VARCHAR(20) NOT NULL,
+                invite_code VARCHAR(10) NOT NULL,
+                reward_amount INTEGER DEFAULT 3,
+                created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+
         // Create indexes for better performance
         await client.query(`
             CREATE INDEX IF NOT EXISTS idx_users_balance ON users(balance DESC);
@@ -104,6 +142,11 @@ async function initializeDatabase() {
             CREATE INDEX IF NOT EXISTS idx_transactions_created_at ON transactions(created_at DESC);
             CREATE INDEX IF NOT EXISTS idx_daily_checkins_date ON daily_checkins(last_checkin_date DESC);
             CREATE INDEX IF NOT EXISTS idx_daily_checkins_streak ON daily_checkins(current_streak DESC);
+            CREATE INDEX IF NOT EXISTS idx_invites_inviter ON invites(inviter_id);
+            CREATE INDEX IF NOT EXISTS idx_invites_updated ON invites(updated_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_invite_rewards_inviter ON invite_rewards(inviter_id);
+            CREATE INDEX IF NOT EXISTS idx_invite_rewards_invitee ON invite_rewards(invitee_id);
+            CREATE INDEX IF NOT EXISTS idx_invite_rewards_created ON invite_rewards(created_at DESC);
         `);
 
         console.log('✅ Database tables initialized successfully');

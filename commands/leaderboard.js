@@ -55,7 +55,7 @@ module.exports = {
             let topPerformers = ''; // For top 3 with special highlighting
             let otherMembers = ''; // For positions 4+
 
-            const medals = ['🥇', '🥈', '🥉'];
+            const medals = ['🏅', '🥈', '🥉'];
             const rankEmojis = ['4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟'];
 
             for (let i = 0; i < leaderboard.length; i++) {
@@ -87,15 +87,15 @@ module.exports = {
 
                 if (position <= 3) {
                     // Top 3 get special treatment
-                    topPerformers += `${medals[position - 1]} **${username}** - ${displayValue}\n`;
+                    topPerformers += `${medals[position - 1]} **${username}** - ${displayValue}\n\n`;
                 } else {
                     // Others get standard treatment
                     const emoji = position <= 10 ? rankEmojis[position - 4] : `**${position}.**`;
-                    otherMembers += `${emoji} ${username} - ${displayValue}\n`;
+                    otherMembers += `${emoji} ${username} - ${displayValue}\n\n`;
                 }
             }
 
-            description = topPerformers + (otherMembers ? '\n' + otherMembers : '');
+            description = topPerformers + (otherMembers ? '\n━━━━━━━━━━━━━━\n' + otherMembers : '');
 
             // Tạo embed với academic aesthetic
             const titleMap = {
