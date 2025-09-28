@@ -139,20 +139,14 @@ module.exports = {
             // Add balance information in secondary layout
             successEmbed.addFields(
                 {
-                    name: '👤 Người Tặng',
-                    value: `${senderName}\n💎 Còn lại: **${newSenderBalance.balance.toLocaleString()} MĐC**`,
+                    name: '<:p_heart:1301433410090303499> Người Tặng',
+                    value: `${senderName}\n Còn lại: **${newSenderBalance.balance.toLocaleString()} MĐC 💵  **`,
                     inline: true
                 },
                 {
-                    name: '🎯 Người Nhận',
-                    value: `${recipientName}\n🆔 ${recipient.id.slice(-4)}...`,
+                    name: '<:p_okay:1288881021282156656> Người Nhận',
                     inline: true
                 },
-                {
-                    name: '📈 Ý Nghĩa',
-                    value: `Tương đương ~${Math.floor(amount / 720)} giờ học`,
-                    inline: true
-                }
             );
 
             // Thêm reason với styling phù hợp
