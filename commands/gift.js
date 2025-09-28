@@ -145,6 +145,7 @@ module.exports = {
                 },
                 {
                     name: '<:p_okay:1288881021282156656> Người Nhận',
+                    value: `${recipientName}\n Đã nhận: **${amount.toLocaleString()} MĐC 🎁**`,
                     inline: true
                 },
             );
