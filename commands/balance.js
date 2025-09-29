@@ -28,7 +28,7 @@ module.exports = {
             const targetDisplayName = targetMember?.displayName || targetUser.username;
 
             // Defer reply để có thời gian xử lý
-            await interaction.deferReply({ ephemeral: isOwnBalance });
+            await interaction.deferReply({ flags: isOwnBalance });
 
             // Lấy thông tin balance từ database
             const userBalance = await UserService.getUserBalance(targetUser.id);
@@ -137,7 +137,7 @@ module.exports = {
             if (interaction.replied || interaction.deferred) {
                 await interaction.editReply({ embeds: [errorEmbed] });
             } else {
-                await interaction.reply({ embeds: [errorEmbed], ephemeral: true });
+                await interaction.reply({ embeds: [errorEmbed], flags: true });
             }
         }
     },

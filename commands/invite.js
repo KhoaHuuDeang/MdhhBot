@@ -11,7 +11,7 @@ module.exports = {
             if (!interaction.member.permissions.has(PermissionFlagsBits.CreateInstantInvite)) {
                 return await interaction.reply({
                     content: '❌ Bạn không có quyền tạo link mời!',
-                    ephemeral: true
+                    flags: true
                 });
             }
 
@@ -31,11 +31,11 @@ module.exports = {
             if (!targetChannel) {
                 return await interaction.reply({
                     content: '❌ Không tìm thấy channel phù hợp để tạo invite!',
-                    ephemeral: true
+                    flags: true
                 });
             }
 
-            await interaction.deferReply({ ephemeral: true });
+            await interaction.deferReply({ flags: true });
 
             // Create the invite
             const invite = await targetChannel.createInvite({
@@ -114,7 +114,7 @@ module.exports = {
             if (interaction.deferred) {
                 await interaction.editReply({ embeds: [errorEmbed] });
             } else {
-                await interaction.reply({ embeds: [errorEmbed], ephemeral: true });
+                await interaction.reply({ embeds: [errorEmbed], flags: true });
             }
         }
     }

@@ -26,7 +26,7 @@ module.exports = {
             const targetDisplayName = targetMember?.displayName || targetUser.username;
             const currentUserDisplayName = interaction.member?.displayName || interaction.user.username;
             
-            await interaction.deferReply({ ephemeral: isOwnStats });
+            await interaction.deferReply({ flags: isOwnStats });
 
             // Get invite manager instance (we'll need to access it from the client)
             const inviteManager = interaction.client.inviteManager;
@@ -144,7 +144,7 @@ module.exports = {
             if (interaction.deferred) {
                 await interaction.editReply({ embeds: [errorEmbed] });
             } else {
-                await interaction.reply({ embeds: [errorEmbed], ephemeral: true });
+                await interaction.reply({ embeds: [errorEmbed], flags: true });
             }
         }
     }

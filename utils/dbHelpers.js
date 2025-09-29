@@ -409,6 +409,260 @@ class UserService {
             client.release();
         }
     }
+
+    // ===== VIP COIN TRANSFER FUNCTIONS =====
+
+    // Transfer VIP coins từ user này sang user khác
+    static async transferVipCoins(fromUserId, toUserId, amount, reason = null) {
+        const client = await pool.connect();
+        try {
+            await client.query('BEGIN');
+
+            // Kiểm tra người gửi có đủ balance_vip không
+            const fromUser = await client.query(
+                'SELECT balance_vip FROM users WHERE user_id = $1',
+                [fromUserId]
+            );
+
+            if (fromUser.rows.length === 0 || fromUser.rows[0].balance_vip < amount) {
+                throw new Error('Insufficient VIP balance');
+            }
+
+            // Đảm bảo người nhận tồn tại - truyền client vào để cùng transaction
+            await this.getOrCreateUser(toUserId, null, client);
+
+            // Trừ VIP coins người gửi
+            await client.query(
+                `UPDATE users
+                 SET balance_vip = balance_vip - $2, updated_at = CURRENT_TIMESTAMP
+                 WHERE user_id = $1`,
+                [fromUserId, amount]
+            );
+
+            // Cộng VIP coins người nhận (cả balance_vip và total_earned_vip)
+            await client.query(
+                `UPDATE users
+                 SET balance_vip = balance_vip + $2,
+                     total_earned_vip = total_earned_vip + $2,
+                     updated_at = CURRENT_TIMESTAMP
+                 WHERE user_id = $1`,
+                [toUserId, amount]
+            );
+
+            // Ghi transaction log
+            const description = reason ? `VIP Gift: ${reason}` : 'VIP coin transfer';
+            await client.query(
+                `INSERT INTO transactions (from_user_id, to_user_id, amount, type, description)
+                 VALUES ($1, $2, $3, 'vip_transfer', $4)`,
+                [fromUserId, toUserId, amount, description]
+            );
+
+            await client.query('COMMIT');
+            console.log(`💎 ${fromUserId} gifted ${amount} MĐV to ${toUserId}`);
+
+            return true;
+        } catch (error) {
+            await client.query('ROLLBACK');
+            console.error('Error in transferVipCoins:', error);
+            throw error;
+        } finally {
+            client.release();
+        }
+    }
+
+    // ===== FUND MANAGEMENT FUNCTIONS =====
+
+    // Tạo quỹ mới
+    static async createFund(name, description) {
+        try {
+            const result = await pool.query(
+                `INSERT INTO funds (name, description, total_donated, total_donated_vip)
+                 VALUES ($1, $2, 0, 0)
+                 RETURNING *`,
+                [name, description]
+            );
+
+            console.log(`🏛️ Created new fund: ${name}`);
+            return result.rows[0];
+        } catch (error) {
+            if (error.code === '23505') { // Unique constraint violation
+                throw new Error('Fund name already exists');
+            }
+            console.error('Error in createFund:', error);
+            throw error;
+        }
+    }
+
+    // Lấy danh sách tất cả quỹ
+    static async getFundsList() {
+        try {
+            const result = await pool.query(
+                `SELECT name, description, total_donated, total_donated_vip, created_at
+                 FROM funds
+                 ORDER BY created_at DESC`
+            );
+
+            return result.rows;
+        } catch (error) {
+            console.error('Error in getFundsList:', error);
+            throw error;
+        }
+    }
+
+    // Lấy thông tin chi tiết của 1 quỹ
+    static async getFundByName(name) {
+        try {
+            const result = await pool.query(
+                'SELECT * FROM funds WHERE name = $1',
+                [name]
+            );
+
+            if (result.rows.length === 0) {
+                return null;
+            }
+
+            return result.rows[0];
+        } catch (error) {
+            console.error('Error in getFundByName:', error);
+            throw error;
+        }
+    }
+
+    // Donate cho quỹ
+    static async donateToFund(userId, fundName, amount, amountVip, reason = null) {
+        const client = await pool.connect();
+        try {
+            await client.query('BEGIN');
+
+            // Kiểm tra quỹ có tồn tại không
+            const fund = await client.query(
+                'SELECT * FROM funds WHERE name = $1',
+                [fundName]
+            );
+
+            if (fund.rows.length === 0) {
+                throw new Error('Fund not found');
+            }
+
+            // Đảm bảo user tồn tại
+            await this.getOrCreateUser(userId, null, client);
+
+            // Kiểm tra user có đủ balance không
+            if (amount > 0) {
+                const userBalance = await client.query(
+                    'SELECT balance FROM users WHERE user_id = $1',
+                    [userId]
+                );
+
+                if (userBalance.rows.length === 0 || userBalance.rows[0].balance < amount) {
+                    throw new Error('Insufficient MĐCoin balance');
+                }
+            }
+
+            // Kiểm tra user có đủ VIP balance không
+            if (amountVip > 0) {
+                const userVipBalance = await client.query(
+                    'SELECT balance_vip FROM users WHERE user_id = $1',
+                    [userId]
+                );
+
+                if (userVipBalance.rows.length === 0 || userVipBalance.rows[0].balance_vip < amountVip) {
+                    throw new Error('Insufficient MĐV balance');
+                }
+            }
+
+            // Trừ tiền user
+            if (amount > 0) {
+                await client.query(
+                    `UPDATE users
+                     SET balance = balance - $2, updated_at = CURRENT_TIMESTAMP
+                     WHERE user_id = $1`,
+                    [userId, amount]
+                );
+            }
+
+            if (amountVip > 0) {
+                await client.query(
+                    `UPDATE users
+                     SET balance_vip = balance_vip - $2, updated_at = CURRENT_TIMESTAMP
+                     WHERE user_id = $1`,
+                    [userId, amountVip]
+                );
+            }
+
+            // Cập nhật tổng tiền quỹ
+            await client.query(
+                `UPDATE funds
+                 SET total_donated = total_donated + $2,
+                     total_donated_vip = total_donated_vip + $3
+                 WHERE name = $1`,
+                [fundName, amount, amountVip]
+            );
+
+            // Lưu donation record
+            await client.query(
+                `INSERT INTO fund_donations (fund_name, donor_id, amount, amount_vip)
+                 VALUES ($1, $2, $3, $4)`,
+                [fundName, userId, amount, amountVip]
+            );
+
+            // Ghi transaction log cho MĐCoin
+            if (amount > 0) {
+                const description = reason ? `Fund donation to ${fundName}: ${reason}` : `Donated to ${fundName}`;
+                await client.query(
+                    `INSERT INTO transactions (from_user_id, to_user_id, amount, type, description)
+                     VALUES ($1, $2, $3, 'fund_donation', $4)`,
+                    [userId, fundName, amount, description]
+                );
+            }
+
+            // Ghi transaction log cho VIP coins
+            if (amountVip > 0) {
+                const description = reason ? `VIP Fund donation to ${fundName}: ${reason}` : `VIP Donated to ${fundName}`;
+                await client.query(
+                    `INSERT INTO transactions (from_user_id, to_user_id, amount, type, description)
+                     VALUES ($1, $2, $3, 'fund_donation', $4)`,
+                    [userId, fundName, amountVip, description]
+                );
+            }
+
+            await client.query('COMMIT');
+            console.log(`🏛️ ${userId} donated ${amount} MĐC + ${amountVip} MĐV to ${fundName}`);
+
+            return true;
+        } catch (error) {
+            await client.query('ROLLBACK');
+            console.error('Error in donateToFund:', error);
+            throw error;
+        } finally {
+            client.release();
+        }
+    }
+
+    // Lấy leaderboard donations của 1 quỹ
+    static async getFundDonations(fundName, limit = 10) {
+        try {
+            const result = await pool.query(
+                `SELECT 
+                    fd.donor_id,
+                    SUM(fd.amount) as total_donated,
+                    SUM(fd.amount_vip) as total_donated_vip,
+                    COUNT(*) as donation_count,
+                    MAX(fd.created_at) as last_donation
+                 FROM fund_donations fd
+                 WHERE fd.fund_name = $1
+                 GROUP BY fd.donor_id
+                 ORDER BY (SUM(fd.amount) + SUM(fd.amount_vip)) DESC
+                 LIMIT $2`,
+                [fundName, limit]
+            );
+
+            return result.rows;
+        } catch (error) {
+            console.error('Error in getFundDonations:', error);
+            throw error;
+        }
+    }
 }
 
 module.exports = UserService;

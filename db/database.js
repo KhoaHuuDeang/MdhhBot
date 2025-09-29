@@ -83,6 +83,32 @@ async function initializeDatabase() {
             END $$;
         `);
 
+        // Add fund_donation enum value for new fund system
+        await client.query(`
+            DO $$ BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM pg_enum
+                    WHERE enumlabel = 'fund_donation'
+                    AND enumtypid = (SELECT oid FROM pg_type WHERE typname = 'transaction_type')
+                ) THEN
+                    ALTER TYPE transaction_type ADD VALUE 'fund_donation';
+                END IF;
+            END $$;
+        `);
+
+        // Add vip_transfer enum value for VIP coin transfers
+        await client.query(`
+            DO $$ BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM pg_enum
+                    WHERE enumlabel = 'vip_transfer'
+                    AND enumtypid = (SELECT oid FROM pg_type WHERE typname = 'transaction_type')
+                ) THEN
+                    ALTER TYPE transaction_type ADD VALUE 'vip_transfer';
+                END IF;
+            END $$;
+        `);
+
         // Create transactions table (no foreign keys for better performance)
         await client.query(`
             CREATE TABLE IF NOT EXISTS transactions (
@@ -133,6 +159,30 @@ async function initializeDatabase() {
             )
         `);
 
+        // Create funds table for donation system
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS funds (
+                id SERIAL PRIMARY KEY,
+                name VARCHAR(100) UNIQUE NOT NULL,
+                description TEXT,
+                total_donated INTEGER DEFAULT 0,
+                total_donated_vip INTEGER DEFAULT 0,
+                created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+
+        // Create fund_donations table for tracking donations
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS fund_donations (
+                id SERIAL PRIMARY KEY,
+                fund_name VARCHAR(100) NOT NULL,
+                donor_id VARCHAR(20) NOT NULL,
+                amount INTEGER DEFAULT 0,
+                amount_vip INTEGER DEFAULT 0,
+                created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+
         // Create indexes for better performance
         await client.query(`
             CREATE INDEX IF NOT EXISTS idx_users_balance ON users(balance DESC);
@@ -147,6 +197,10 @@ async function initializeDatabase() {
             CREATE INDEX IF NOT EXISTS idx_invite_rewards_inviter ON invite_rewards(inviter_id);
             CREATE INDEX IF NOT EXISTS idx_invite_rewards_invitee ON invite_rewards(invitee_id);
             CREATE INDEX IF NOT EXISTS idx_invite_rewards_created ON invite_rewards(created_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_funds_name ON funds(name);
+            CREATE INDEX IF NOT EXISTS idx_fund_donations_fund_name ON fund_donations(fund_name);
+            CREATE INDEX IF NOT EXISTS idx_fund_donations_donor ON fund_donations(donor_id);
+            CREATE INDEX IF NOT EXISTS idx_fund_donations_created ON fund_donations(created_at DESC);
         `);
 
         console.log('✅ Database tables initialized successfully');

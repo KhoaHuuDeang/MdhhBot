@@ -245,8 +245,25 @@ client.once('clientReady', async () => {
     })
 })
 
-// Xử lý sự kiện slash command
+// Xử lý sự kiện slash command và autocomplete
 client.on(Events.InteractionCreate, async interaction => {
+    // Xử lý autocomplete interactions
+    if (interaction.isAutocomplete()) {
+        const command = client.commands.get(interaction.commandName);
+        
+        if (!command) {
+            console.error(`No command matching ${interaction.commandName} was found for autocomplete.`);
+            return;
+        }
+
+        try {
+            await command.execute(interaction);
+        } catch (error) {
+            console.error(`❌ Error executing autocomplete for ${interaction.commandName}:`, error);
+        }
+        return;
+    }
+
     // Chỉ xử lý lệnh chat input
     if (!interaction.isChatInputCommand()) return;
 
@@ -270,7 +287,7 @@ client.on(Events.InteractionCreate, async interaction => {
 
         const errorMessage = {
             content: 'Có lỗi xảy ra khi thực hiện command này!',
-            ephemeral: true
+            flags: true
         };
 
         // Nếu đã reply hoặc defer, edit lại reply
