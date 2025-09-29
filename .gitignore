@@ -13,3 +13,5 @@ mcp-server/database-server.js
 .claude/mcp-config.json
 test-mcp.js
 BOT_GUIDE.md
+
+/generated/prisma

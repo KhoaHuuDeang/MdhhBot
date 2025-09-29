@@ -1,5 +1,5 @@
-const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
-const UserService = require('../utils/dbHelpers');
+const { SlashCommandBuilder, EmbedBuilder, MessageFlags } = require('discord.js');
+const UserService = require('../utils/prismaService');  // CHANGED: From dbHelpers to PrismaService
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -31,7 +31,7 @@ module.exports = {
             await interaction.deferReply();
 
             // Lấy dữ liệu leaderboard từ database
-            const leaderboard = await UserService.getLeaderboard(type, limit);
+            const leaderboard = await interaction.client.prismaService.getLeaderboard(type, limit);
 
             if (leaderboard.length === 0) {
                 const emptyEmbed = new EmbedBuilder()
@@ -39,7 +39,7 @@ module.exports = {
                     .setTitle('🎓 Study Community Leaderboard')
                     .setDescription('Cộng đồng học tập đang chờ những thành viên tích cực đầu tiên!')
                     .addFields({
-                        name: '🚀 Hãy Là Người Đầu Tiên',
+                        name: '🟩 Hãy Là Người Đầu Tiên',
                         value: '• Tham gia voice channel học tập\n• Duy trì thói quen học tập\n• Xuất hiện trong bảng xếp hạng danh giá!',
                         inline: false
                     })
@@ -99,8 +99,8 @@ module.exports = {
 
             // Tạo embed với academic aesthetic
             const titleMap = {
-                'balance': '💎 Bảng Xếp Hạng MĐCoin',
-                'total_earned': '🎓 Bảng Xếp Hạng Thời Gian Học'
+                'balance': 'Bảng Xếp Hạng MĐCoin',
+                'totalEarned': '🎓 Bảng Xếp Hạng Thời Gian Học'
             };
 
             const embed = new EmbedBuilder()
@@ -126,7 +126,7 @@ module.exports = {
 
             // Thêm thông tin về user hiện tại nếu họ không có trong top
             try {
-                const currentUserBalance = await UserService.getUserBalance(interaction.user.id);
+                const currentUserBalance = await interaction.client.prismaService.getUserBalance(interaction.user.id);
                 if (currentUserBalance.exists) {
                     const currentUserValue = type === 'balance' ? currentUserBalance.balance : currentUserBalance.total_earned;
 
@@ -171,7 +171,7 @@ module.exports = {
             if (interaction.replied || interaction.deferred) {
                 await interaction.editReply({ embeds: [errorEmbed] });
             } else {
-                await interaction.reply({ embeds: [errorEmbed], flags: true });
+                await interaction.reply({ embeds: [errorEmbed], flags: MessageFlags.Ephemeral });
             }
         }
     },

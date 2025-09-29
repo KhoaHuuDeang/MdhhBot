@@ -1,5 +1,5 @@
-const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
-const InviteManager = require('../utils/InviteManager');
+const { SlashCommandBuilder, EmbedBuilder, MessageFlags } = require('discord.js');
+const PrismaService = require('../utils/prismaService');  // UNIFIED: All functions in one service
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -26,7 +26,7 @@ module.exports = {
             const targetDisplayName = targetMember?.displayName || targetUser.username;
             const currentUserDisplayName = interaction.member?.displayName || interaction.user.username;
             
-            await interaction.deferReply({ flags: isOwnStats });
+            await interaction.deferReply({ flags: isOwnStats ? MessageFlags.Ephemeral : undefined });
 
             // Get invite manager instance (we'll need to access it from the client)
             const inviteManager = interaction.client.inviteManager;
@@ -37,8 +37,8 @@ module.exports = {
                 });
             }
 
-            // Get invite statistics
-            const stats = await inviteManager.getInviteStats(targetUser.id);
+            // Get invite statistics - now from unified PrismaService
+            const stats = await interaction.client.prismaService.getUserInviteStats(targetUser.id);
             
             // Create embed
             const embed = new EmbedBuilder()
@@ -144,7 +144,7 @@ module.exports = {
             if (interaction.deferred) {
                 await interaction.editReply({ embeds: [errorEmbed] });
             } else {
-                await interaction.reply({ embeds: [errorEmbed], flags: true });
+                await interaction.reply({ embeds: [errorEmbed], flags: MessageFlags.Ephemeral });
             }
         }
     }

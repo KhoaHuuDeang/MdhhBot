@@ -1,15 +1,11 @@
 require('dotenv').config(); // Load biến môi trường
-const { Client, GatewayIntentBits, Collection, Events } = require('discord.js'); // Import Discord.js
+const { Client, GatewayIntentBits, Collection, Events, MessageFlags } = require('discord.js'); // Import Discord.js
 
 const fs = require('node:fs');
 const path = require('node:path');
 
 const countDown = require('./utils/countDown');
-const InviteManager = require('./utils/InviteManager');
-
-const { initializeDatabase } = require('./db/database');
-const { getUserBalance } = require('./utils/dbHelpers');
-const UserService = require('./utils/dbHelpers');
+const PrismaService = require('./utils/prismaService');  // UNIFIED: All functions in one service
 
 
 // Tạo client Discord với intents cần thiết
@@ -27,10 +23,10 @@ const client = new Client({
 // Tạo collection để lưu commands
 client.commands = new Collection();
 
-// Initialize InviteManager
-const inviteManager = new InviteManager(client);
-// Expose inviteManager to client so commands can access it
-client.inviteManager = inviteManager;
+// Initialize InviteManager - now part of PrismaService
+// PrismaService is exported as singleton instance
+const prismaService = PrismaService;
+client.prismaService = prismaService;
 
 // Load command files
 const commandsPath = path.join(__dirname, 'commands');
@@ -58,14 +54,8 @@ client.once('clientReady', async () => {
     let user = client.users.cache.size // Số user đã cache
     console.log('Bot serve for ', user, ' users ')
 
-    // Initialize database
-    try {
-        await initializeDatabase();
-        console.log('✅ Database initialized successfully');
-    } catch (error) {
-        console.error('❌ Failed to initialize database:', error);
-        process.exit(1);
-    }
+    // Prisma handles database connection automatically
+    console.log('✅ Database connection managed by Prisma ORM');
 
     // Set trạng thái bot
     // client.user.setActivity('Đang nấu con bot', { type: 0 }) // Old status
@@ -77,9 +67,9 @@ client.once('clientReady', async () => {
         console.log(`✅ Bot is on  ${guild.name}`);
         console.log(`📈 Guild has ${guild.memberCount} members`);
 
-        // Initialize invite manager
+        // Initialize invite manager - now part of PrismaService
         try {
-            await inviteManager.initializeCache(guild);
+            await prismaService.initializeInviteCache(guild, client);
             console.log('✅ Invite manager initialized successfully');
         } catch (error) {
             console.error('❌ Failed to initialize invite manager:', error);
@@ -100,10 +90,10 @@ client.once('clientReady', async () => {
 
         try {
             // Ensure new user exists in database
-            await UserService.getOrCreateUser(member.user.id);
+            await prismaService.getOrCreateUser(member.user.id);
 
-            // Find which invite was used
-            const usedInvite = await inviteManager.findUsedInvite(member.guild);
+            // Find which invite was used - now in PrismaService
+            const usedInvite = await prismaService.findUsedInvite(member.guild);
 
             if (usedInvite && usedInvite.inviter) {
                 // Don't reward self-invites
@@ -118,8 +108,8 @@ client.once('clientReady', async () => {
                     return;
                 }
 
-                // Reward the inviter
-                await inviteManager.rewardInviter(
+                // Reward the inviter - now in PrismaService
+                await prismaService.rewardInviter(
                     usedInvite.inviter,
                     member,
                     usedInvite.code,
@@ -176,13 +166,13 @@ client.once('clientReady', async () => {
         const user = thisTime.member.user
 
         // có trong discord là 1 chuyện, database là 1 chuyện 
-        UserService.getOrCreateUser(user.id)
+        prismaService.getOrCreateUser(user.id)
 
         if (!user) return;
         if (user.bot) return; // Bỏ qua bot
 
         // có user trong database thì mới check được 
-        let balance = await getUserBalance(user.id)
+        let balance = await prismaService.getUserBalance(user.id)
 
         // User join voice (standard) - exclude intermediate channel
         if (thisTime.channelId && thisTime.channelId !== '1357199605955039363' && (!lastTime.channelId || lastTime.channelId === '1357199605955039363')) {
@@ -191,7 +181,7 @@ client.once('clientReady', async () => {
 
             // Xóa interval để cleanup tránh gọi infinite khi user out 
             // muốn xóa interval thì phải có timmer, giữ nó lại truyền vào channelSession
-            const timmer = countDown(user.id) // New version with database integration
+            const timmer = countDown(user.id, prismaService) // Pass prisma instance
 
             let minutesLeft = 60;
             let countdownMessage = null
@@ -287,7 +277,7 @@ client.on(Events.InteractionCreate, async interaction => {
 
         const errorMessage = {
             content: 'Có lỗi xảy ra khi thực hiện command này!',
-            flags: true
+            flags: MessageFlags.Ephemeral
         };
 
         // Nếu đã reply hoặc defer, edit lại reply

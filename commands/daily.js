@@ -1,5 +1,5 @@
-const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
-const UserService = require('../utils/dbHelpers');
+const { SlashCommandBuilder, EmbedBuilder, MessageFlags } = require('discord.js');
+const UserService = require('../utils/prismaService');  // CHANGED: From dbHelpers to PrismaService
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -18,7 +18,7 @@ module.exports = {
             await interaction.deferReply();
 
             // Kiểm tra trạng thái checkin hiện tại
-            const checkinStatus = await UserService.getDailyCheckinStatus(user.id);
+            const checkinStatus = await interaction.client.prismaService.getDailyCheckinStatus(user.id);
 
             if (!checkinStatus.canCheckIn) {
                 // User đã checkin hôm nay
@@ -68,7 +68,7 @@ module.exports = {
             }
 
             // Xử lý daily checkin
-            const result = await UserService.processDailyCheckin(user.id);
+            const result = await interaction.client.prismaService.processDailyCheckin(user.id);
 
             // Tạo embed thành công
             const embed = new EmbedBuilder()
@@ -87,7 +87,7 @@ module.exports = {
                         inline: true
                     },
                     {
-                        name: '💰 Đã Nhận',
+                        name: '💵 Đã Nhận',
                         value: `**+${result.reward} MĐC**`,
                         inline: true
                     }
@@ -163,7 +163,7 @@ module.exports = {
             if (interaction.replied || interaction.deferred) {
                 await interaction.editReply({ embeds: [errorEmbed] });
             } else {
-                await interaction.reply({ embeds: [errorEmbed], flags: true });
+                await interaction.reply({ embeds: [errorEmbed], flags: MessageFlags.Ephemeral });
             }
         }
     },

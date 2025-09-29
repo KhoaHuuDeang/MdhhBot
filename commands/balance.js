@@ -1,5 +1,5 @@
-const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
-const UserService = require('../utils/dbHelpers');
+const { SlashCommandBuilder, EmbedBuilder, MessageFlags } = require('discord.js');
+const PrismaService = require('../utils/prismaService');  // UNIFIED SERVICE
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -27,11 +27,15 @@ module.exports = {
             
             const targetDisplayName = targetMember?.displayName || targetUser.username;
 
-            // Defer reply để có thời gian xử lý
-            await interaction.deferReply({ flags: isOwnBalance });
+            // Defer reply để có thời gian xử lý - chỉ private nếu check balance của mình
+            if (isOwnBalance) {
+                await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+            } else {
+                await interaction.deferReply();
+            }
 
             // Lấy thông tin balance từ database
-            const userBalance = await UserService.getUserBalance(targetUser.id);
+            const userBalance = await interaction.client.prismaService.getUserBalance(targetUser.id);
 
             if (!userBalance.exists) {
                 // User chưa có trong database - welcome design
@@ -41,7 +45,7 @@ module.exports = {
                     .setDescription(`${isOwnBalance ? 'Bạn' : targetDisplayName} chưa bắt đầu hành trình học tập.`)
                     .addFields(
                         {
-                            name: '💎 MĐCoin Hiện Tại',
+                            name: '💵 MĐCoin Hiện Tại',
                             value: '**0 MĐCoin | 0 MĐV**',
                             inline: false
                         },
@@ -59,7 +63,7 @@ module.exports = {
                 return;
             }
 
-            // Calculate spent amounts
+            // Calculate spent amounts - using snake_case from database
             const spentAmount = userBalance.total_earned - userBalance.balance;
             const spentAmountVip = userBalance.total_earned_vip - userBalance.balance_vip;
 
@@ -89,12 +93,12 @@ module.exports = {
                 },
                 {
                     name: '<:f_glasses:1357211300538875945> Thời Gian Học',
-                    value: `~${Math.floor(userBalance.total_earned / 720)} giờ`,
+                    value: `~${Math.floor(userBalance.total_earned)} giờ`,
                     inline: true
                 }
             );
 
-            // Thêm thông tin hướng dẫn cho người dùng mới
+            // Thêm thông tin hướng dẫn cho người dùng mới  
             if (isOwnBalance && userBalance.balance === 0 && userBalance.balance_vip === 0) {
                 embed.setColor('#6A994E'); // Softer green for new users
                 embed.addFields({
@@ -137,7 +141,7 @@ module.exports = {
             if (interaction.replied || interaction.deferred) {
                 await interaction.editReply({ embeds: [errorEmbed] });
             } else {
-                await interaction.reply({ embeds: [errorEmbed], flags: true });
+                await interaction.reply({ embeds: [errorEmbed], flags: MessageFlags.Ephemeral });
             }
         }
     },

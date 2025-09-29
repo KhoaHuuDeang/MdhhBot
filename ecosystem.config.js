@@ -13,7 +13,7 @@ module.exports = {
       ref: "origin/main",
       repo: "https://github.com/KhoaHuuDeang/MdhhBot.git",
       path: "/home/khoa54087/MdhhBot",
-      "post-deploy": "git reset --hard && git pull && npm install && pm2 restart discord-bot"
+      "post-deploy": "git reset --hard && git pull && npm install && npx prisma generate && pm2 restart discord-bot"
     }
   }
 };

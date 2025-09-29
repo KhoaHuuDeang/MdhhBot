@@ -1,0 +1,107 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model daily_checkins {
+  user_id           String    @id @db.VarChar(20)
+  last_checkin_date DateTime  @db.Date
+  current_streak    Int?      @default(1)
+  total_checkins    Int?      @default(0)
+  created_at        DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at        DateTime? @default(now()) @db.Timestamptz(6)
+
+  @@index([last_checkin_date(sort: Desc)], map: "idx_daily_checkins_date")
+  @@index([current_streak(sort: Desc)], map: "idx_daily_checkins_streak")
+}
+
+model fund_donations {
+  id         Int       @id @default(autoincrement())
+  fund_name  String    @db.VarChar(100)
+  donor_id   String    @db.VarChar(20)
+  amount     Int?      @default(0)
+  amount_vip Int?      @default(0)
+  created_at DateTime? @default(now()) @db.Timestamptz(6)
+
+  @@index([created_at(sort: Desc)], map: "idx_fund_donations_created")
+  @@index([donor_id], map: "idx_fund_donations_donor")
+  @@index([fund_name], map: "idx_fund_donations_fund_name")
+}
+
+model funds {
+  id                Int       @id @default(autoincrement())
+  name              String    @unique @db.VarChar(100)
+  description       String?
+  total_donated     Int?      @default(0)
+  total_donated_vip Int?      @default(0)
+  created_at        DateTime? @default(now()) @db.Timestamptz(6)
+
+  @@index([name], map: "idx_funds_name")
+}
+
+model invite_rewards {
+  id            Int       @id @default(autoincrement())
+  inviter_id    String    @db.VarChar(20)
+  invitee_id    String    @db.VarChar(20)
+  invite_code   String    @db.VarChar(10)
+  reward_amount Int?      @default(3)
+  created_at    DateTime? @default(now()) @db.Timestamptz(6)
+
+  @@index([created_at(sort: Desc)], map: "idx_invite_rewards_created")
+  @@index([invitee_id], map: "idx_invite_rewards_invitee")
+  @@index([inviter_id], map: "idx_invite_rewards_inviter")
+}
+
+model invites {
+  code       String    @id @db.VarChar(10)
+  inviter_id String    @db.VarChar(20)
+  uses       Int?      @default(0)
+  max_uses   Int?      @default(0)
+  expires_at DateTime? @db.Timestamptz(6)
+  created_at DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at DateTime? @default(now()) @db.Timestamptz(6)
+
+  @@index([inviter_id], map: "idx_invites_inviter")
+  @@index([updated_at(sort: Desc)], map: "idx_invites_updated")
+}
+
+model transactions {
+  id           Int              @id @default(autoincrement())
+  from_user_id String?          @db.VarChar(20)
+  to_user_id   String           @db.VarChar(100)
+  amount       Int
+  type         transaction_type
+  description  String?
+  created_at   DateTime?        @default(now()) @db.Timestamptz(6)
+
+  @@index([created_at(sort: Desc)], map: "idx_transactions_created_at")
+  @@index([from_user_id], map: "idx_transactions_from_user")
+  @@index([to_user_id], map: "idx_transactions_to_user")
+}
+
+model users {
+  user_id          String    @id @db.VarChar(20)
+  balance          Int?      @default(0)
+  balance_vip      Int?      @default(0)
+  total_earned     Int?      @default(0)
+  total_earned_vip Int?      @default(0)
+  created_at       DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at       DateTime? @default(now()) @db.Timestamptz(6)
+
+  @@index([balance(sort: Desc)], map: "idx_users_balance")
+  @@index([total_earned(sort: Desc)], map: "idx_users_total_earned")
+}
+
+enum transaction_type {
+  voice_earn
+  gift
+  admin
+  daily_checkin
+  invite_reward
+  fund_donation
+  vip_transfer
+}

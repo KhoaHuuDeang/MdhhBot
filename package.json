@@ -1,8 +1,10 @@
 {
   "dependencies": {
+    "@prisma/client": "^6.16.2",
     "discord.js": "^14.22.1",
     "dotenv": "^17.2.2",
-    "pg": "^8.16.3"
+    "pg": "^8.16.3",
+    "prisma": "^6.16.2"
   },
   "devDependencies": {
     "@eslint/js": "^9.35.0",
@@ -12,6 +14,8 @@
   "scripts": {
     "start": "node index.js",
     "dev": "nodemon index.js",
-    "test": "node index.js"
+    "test": "node index.js",
+    "deploy": "npm install && npx prisma generate && node index.js",
+    "build": "npx prisma generate"
   }
 }

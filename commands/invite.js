@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits, MessageFlags } = require('discord.js');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -11,7 +11,7 @@ module.exports = {
             if (!interaction.member.permissions.has(PermissionFlagsBits.CreateInstantInvite)) {
                 return await interaction.reply({
                     content: '❌ Bạn không có quyền tạo link mời!',
-                    flags: true
+                    flags: MessageFlags.Ephemeral
                 });
             }
 
@@ -31,11 +31,11 @@ module.exports = {
             if (!targetChannel) {
                 return await interaction.reply({
                     content: '❌ Không tìm thấy channel phù hợp để tạo invite!',
-                    flags: true
+                    flags: MessageFlags.Ephemeral
                 });
             }
 
-            await interaction.deferReply({ flags: true });
+            await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
             // Create the invite
             const invite = await targetChannel.createInvite({
@@ -114,7 +114,7 @@ module.exports = {
             if (interaction.deferred) {
                 await interaction.editReply({ embeds: [errorEmbed] });
             } else {
-                await interaction.reply({ embeds: [errorEmbed], flags: true });
+                await interaction.reply({ embeds: [errorEmbed], flags: MessageFlags.Ephemeral });
             }
         }
     }

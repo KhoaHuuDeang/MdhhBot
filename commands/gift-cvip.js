@@ -1,5 +1,5 @@
-const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
-const UserService = require('../utils/dbHelpers');
+const { SlashCommandBuilder, EmbedBuilder, MessageFlags } = require('discord.js');
+const UserService = require('../utils/prismaService');  // CHANGED: From dbHelpers to PrismaService
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -60,7 +60,7 @@ module.exports = {
             }
 
             // Lấy thông tin balance của người gửi
-            const senderBalance = await UserService.getUserBalance(sender.id);
+            const senderBalance = await interaction.client.prismaService.getUserBalance(sender.id);
             if (!senderBalance.exists || senderBalance.balance_vip < amount) {
                 const errorEmbed = new EmbedBuilder()
                     .setColor('#FF6B6B')
@@ -86,12 +86,12 @@ module.exports = {
             }
 
             // Thực hiện transfer VIP coins
-            await UserService.transferVipCoins(sender.id, receiver.id, amount, reason);
+            await interaction.client.prismaService.transferVipCoins(sender.id, receiver.id, amount, reason);
 
             // Tạo embed thành công
             const embed = new EmbedBuilder()
                 .setColor('#6A994E')
-                .setTitle('💎 VIP Gift Thành Công!')
+                .setTitle('💴 VIP Gift Thành Công!')
                 .setDescription(`**${senderDisplayName}** đã tặng **${amount.toLocaleString()} MĐV** cho **${receiverDisplayName}**!`)
                 .addFields(
                     {
@@ -105,7 +105,7 @@ module.exports = {
                         inline: true
                     },
                     {
-                        name: '💰 Số Tiền',
+                        name: '💴 Số Tiền',
                         value: `**${amount.toLocaleString()} MĐV**`,
                         inline: true
                     }
@@ -124,9 +124,9 @@ module.exports = {
             }
 
             // Thêm balance còn lại của người gửi
-            const remainingVip = senderBalance.balance_vip - amount;
+            const remainingVip = (senderBalance.balance_vip || 0) - amount;
             embed.addFields({
-                name: '💳 Balance Còn Lại',
+                name: '💴 MĐVIP Còn Lại',
                 value: `**${remainingVip.toLocaleString()} MĐV**`,
                 inline: false
             });
@@ -137,7 +137,7 @@ module.exports = {
             try {
                 const dmEmbed = new EmbedBuilder()
                     .setColor('#6A994E')
-                    .setTitle('🎁 Bạn Nhận Được VIP Gift!')
+                    .setTitle('💴 Bạn Nhận Được VIP Gift!')
                     .setDescription(`**${senderDisplayName}** đã tặng bạn **${amount.toLocaleString()} MĐV**!`)
                     .addFields({
                         name: '💭 Lời Nhắn',
@@ -172,7 +172,7 @@ module.exports = {
             if (interaction.replied || interaction.deferred) {
                 await interaction.editReply({ embeds: [errorEmbed] });
             } else {
-                await interaction.reply({ embeds: [errorEmbed], flags: 64 });
+                await interaction.reply({ embeds: [errorEmbed], flags: MessageFlags.Ephemeral });
             }
         }
     },

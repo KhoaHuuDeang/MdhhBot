@@ -1,5 +1,5 @@
-const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
-const UserService = require('../utils/dbHelpers');
+const { SlashCommandBuilder, EmbedBuilder, MessageFlags } = require('discord.js');
+const UserService = require('../utils/prismaService');  // CHANGED: From dbHelpers to PrismaService
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -79,7 +79,7 @@ module.exports = {
             }
 
             // Kiểm tra balance của người gửi
-            const senderBalance = await UserService.getUserBalance(sender.id);
+            const senderBalance = await interaction.client.prismaService.getUserBalance(sender.id);
 
             if (!senderBalance.exists || senderBalance.balance < amount) {
                 const errorEmbed = new EmbedBuilder()
@@ -88,17 +88,17 @@ module.exports = {
                     .setDescription('Balance của bạn không đủ để thực hiện giao dịch này.')
                     .addFields(
                         {
-                            name: '💎 Balance Hiện Tại',
+                            name: '💵 Balance Hiện Tại',
                             value: `**${senderBalance.balance?.toLocaleString() || 0} MĐC**`,
                             inline: true
                         },
                         {
-                            name: '💰 Số Tiền Cần',
+                            name: '⚠️ Số Tiền Cần',
                             value: `**${amount.toLocaleString()} MĐC**`,
                             inline: true
                         },
                         {
-                            name: '📊 Còn Thiếu',
+                            name: '⚠️ Còn Thiếu',
                             value: `**${(amount - (senderBalance.balance || 0)).toLocaleString()} MĐC**`,
                             inline: true
                         },
@@ -116,10 +116,10 @@ module.exports = {
             }
 
             // Thực hiện transfer
-            await UserService.transferCoins(sender.id, recipient.id, amount, reason);
+            await interaction.client.prismaService.transferCoins(sender.id, recipient.id, amount, reason);
 
             // Lấy balance mới của người gửi để hiển thị
-            const newSenderBalance = await UserService.getUserBalance(sender.id);
+            const newSenderBalance = await interaction.client.prismaService.getUserBalance(sender.id);
 
             // Tạo embed thông báo thành công với design học tập
             const successEmbed = new EmbedBuilder()
@@ -129,7 +129,7 @@ module.exports = {
                 .addFields(
                     {
                         name: '🤝 Thông Tin Giao Dịch',
-                        value: `**${senderName}** → **${recipientName}**\n💰 **${amount.toLocaleString()} MĐC**`,
+                        value: `**${senderName}** → **${recipientName}**\n💵 **${amount.toLocaleString()} MĐC**`,
                         inline: false
                     }
                 )
@@ -145,7 +145,7 @@ module.exports = {
                 },
                 {
                     name: '<:p_okay:1288881021282156656> Người Nhận',
-                    value: `${recipientName}\n Đã nhận: **${amount.toLocaleString()} MĐC 🎁**`,
+                    value: `${recipientName}\n Đã nhận: **${amount.toLocaleString()} MĐC 💵**`,
                     inline: true
                 },
             );
@@ -189,7 +189,7 @@ module.exports = {
             if (interaction.replied || interaction.deferred) {
                 await interaction.editReply({ embeds: [errorEmbed] });
             } else {
-                await interaction.reply({ embeds: [errorEmbed], flags: true });
+                await interaction.reply({ embeds: [errorEmbed], flags: MessageFlags.Ephemeral });
             }
         }
     },

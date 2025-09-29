@@ -1,5 +1,5 @@
-const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
-const UserService = require('../utils/dbHelpers');
+const { SlashCommandBuilder, EmbedBuilder, MessageFlags } = require('discord.js');
+const UserService = require('../utils/prismaService');  // CHANGED: From dbHelpers to PrismaService
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -37,7 +37,7 @@ module.exports = {
             
             try {
                 // Get list of funds for autocomplete
-                const funds = await UserService.getFundsList();
+                const funds = await interaction.client.prismaService.getFundsList();
                 
                 // Filter funds based on user input
                 const filtered = funds.filter(fund => 
@@ -83,7 +83,7 @@ module.exports = {
             }
 
             // Kiểm tra quỹ có tồn tại không
-            const fund = await UserService.getFundByName(fundName);
+            const fund = await interaction.client.prismaService.getFundByName(fundName);
             if (!fund) {
                 const errorEmbed = new EmbedBuilder()
                     .setColor('#FF6B6B')
@@ -97,7 +97,7 @@ module.exports = {
             }
 
             // Lấy balance hiện tại của user
-            const userBalance = await UserService.getUserBalance(user.id);
+            const userBalance = await interaction.client.prismaService.getUserBalance(user.id);
             if (!userBalance.exists) {
                 const errorEmbed = new EmbedBuilder()
                     .setColor('#FF6B6B')
@@ -123,11 +123,11 @@ module.exports = {
                 return;
             }
 
-            if (mdvAmount > userBalance.balance_vip) {
+            if (mdvAmount > (userBalance.balance_vip || 0)) {
                 const errorEmbed = new EmbedBuilder()
                     .setColor('#FF6B6B')
                     .setTitle('❌ Không Đủ MĐV')
-                    .setDescription(`Bạn chỉ có **${userBalance.balance_vip} MĐV** nhưng muốn donate **${mdvAmount} MĐV**.`)
+                    .setDescription(`Bạn chỉ có **${userBalance.balance_vip || 0} MĐV** nhưng muốn donate **${mdvAmount} MĐV**.`)
                     .setTimestamp()
                     .setFooter({ text: 'MDHH Community • Fund System' });
 
@@ -136,10 +136,10 @@ module.exports = {
             }
 
             // Thực hiện donation
-            await UserService.donateToFund(user.id, fundName, mdcoinAmount, mdvAmount, reason);
+            await interaction.client.prismaService.donateToFund(user.id, fundName, mdcoinAmount, mdvAmount, reason);
 
             // Lấy thông tin quỹ sau khi donate
-            const updatedFund = await UserService.getFundByName(fundName);
+            const updatedFund = await interaction.client.prismaService.getFundByName(fundName);
 
             // Tạo embed thành công
             const embed = new EmbedBuilder()
@@ -148,13 +148,15 @@ module.exports = {
                 .setDescription(`Cảm ơn **${interaction.member?.displayName || user.username}** đã đóng góp cho **${fundName}**!`)
                 .addFields(
                     {
-                        name: '💰 Số Tiền Donate',
-                        value: `**${mdcoinAmount.toLocaleString()} MĐCoin** | **${mdvAmount.toLocaleString()} MĐV**`,
+                        name: '💵 Số Tiền Donate',
+                        value: `💵**${mdcoinAmount.toLocaleString()} MĐCoin** | **${mdvAmount.toLocaleString()} MĐV**`,
                         inline: true
                     },
                     {
                         name: '🏛️ Tổng Quỹ Hiện Tại',
-                        value: `**${updatedFund.total_donated.toLocaleString()} MĐC** | **${updatedFund.total_donated_vip.toLocaleString()} MĐV**`,
+                        value: updatedFund ? 
+                            `**${(updatedFund.total_donated || 0).toLocaleString()} MĐC** | **${(updatedFund.total_donated_vip || 0).toLocaleString()} MĐV**` :
+                            `**${mdcoinAmount.toLocaleString()} MĐC** | **${mdvAmount.toLocaleString()} MĐV**`,
                         inline: true
                     }
                 )
@@ -173,7 +175,7 @@ module.exports = {
 
             // Thêm balance còn lại
             const remainingBalance = userBalance.balance - mdcoinAmount;
-            const remainingVip = userBalance.balance_vip - mdvAmount;
+            const remainingVip = userBalance.balanceVip - mdvAmount;
             
             embed.addFields({
                 name: '💳 Balance Còn Lại',
@@ -213,7 +215,7 @@ module.exports = {
             if (interaction.replied || interaction.deferred) {
                 await interaction.editReply({ embeds: [errorEmbed] });
             } else {
-                await interaction.reply({ embeds: [errorEmbed], flags: 64 });
+                await interaction.reply({ embeds: [errorEmbed], flags: MessageFlags.Ephemeral });
             }
         }
     },

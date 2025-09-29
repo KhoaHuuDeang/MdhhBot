@@ -1,5 +1,5 @@
-const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
-const UserService = require('../utils/dbHelpers');
+const { SlashCommandBuilder, EmbedBuilder, MessageFlags } = require('discord.js');
+const UserService = require('../utils/prismaService');  // CHANGED: From dbHelpers to PrismaService
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -28,28 +28,33 @@ module.exports = {
             await interaction.deferReply();
 
             // Tạo quỹ mới
-            const newFund = await UserService.createFund(fundName, description);
+            const newFund = await interaction.client.prismaService.createFund(fundName, description);
 
-            // Tạo embed thành công
+            // Tạo embed thành công với UI đẹp hơn
             const embed = new EmbedBuilder()
                 .setColor('#386641')
-                .setTitle('🏛️ Quỹ Được Tạo Thành Công!')
-                .setDescription(`**${fundName}** đã được tạo và sẵn sàng nhận donations!`)
+                .setTitle('Quỹ Được Tạo Thành Công!')
+                .setDescription(`**${fundName}** đã sẵn sàng nhận quyên góp\n\u2000`)
                 .addFields(
                     {
-                        name: '📝 Mô Tả',
-                        value: description,
+                        name: 'Mô Tả Quỹ',
+                        value: `*${description}*\n\u2000`,
                         inline: false
                     },
                     {
-                        name: '💰 Tình Trạng Hiện Tại',
-                        value: `**0 MĐCoin** | **0 MĐV**`,
+                        name: 'Tình Trạng Hiện Tại',
+                        value: `**0** MĐCoin\n**0** MĐV\n\u2000`,
                         inline: true
                     },
                     {
-                        name: '🎯 Bắt Đầu Donate',
-                        value: `Sử dụng \`/donate fund:${fundName}\``,
+                        name: 'Bắt Đầu Quyên Góp',
+                        value: `\`/donate fund:${fundName}\`\n\u2000`,
                         inline: true
+                    },
+                    {
+                        name: 'Hướng Dẫn Tiếp Theo',
+                        value: '• Chia sẻ quỹ với cộng đồng\n• Theo dõi donations qua `/fund`\n• Xem tất cả quỹ qua `/fund-list`',
+                        inline: false
                     }
                 )
                 .setThumbnail(user.displayAvatarURL())
@@ -69,7 +74,7 @@ module.exports = {
 
             const errorEmbed = new EmbedBuilder()
                 .setColor('#FF6B6B')
-                .setTitle('❌ Lỗi Tạo Quỹ')
+                .setTitle('Lỗi Tạo Quỹ')
                 .setDescription(errorMessage)
                 .setTimestamp()
                 .setFooter({ text: 'MDHH Community • Fund System' });
@@ -77,7 +82,7 @@ module.exports = {
             if (interaction.replied || interaction.deferred) {
                 await interaction.editReply({ embeds: [errorEmbed] });
             } else {
-                await interaction.reply({ embeds: [errorEmbed], flags: 64 });
+                await interaction.reply({ embeds: [errorEmbed], flags: MessageFlags.Ephemeral });
             }
         }
     },

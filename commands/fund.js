@@ -1,5 +1,5 @@
-const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
-const UserService = require('../utils/dbHelpers');
+const { SlashCommandBuilder, EmbedBuilder, MessageFlags } = require('discord.js');
+const UserService = require('../utils/prismaService');  // CHANGED: From dbHelpers to PrismaService
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -19,7 +19,7 @@ module.exports = {
             
             try {
                 // Get list of funds for autocomplete
-                const funds = await UserService.getFundsList();
+                const funds = await interaction.client.prismaService.getFundsList();
                 
                 // Filter funds based on user input
                 const filtered = funds.filter(fund => 
@@ -48,7 +48,7 @@ module.exports = {
             await interaction.deferReply();
 
             // Kiểm tra quỹ có tồn tại không
-            const fund = await UserService.getFundByName(fundName);
+            const fund = await interaction.client.prismaService.getFundByName(fundName);
             if (!fund) {
                 const errorEmbed = new EmbedBuilder()
                     .setColor('#FF6B6B')
@@ -61,28 +61,28 @@ module.exports = {
                 return;
             }
 
-            // Lấy leaderboard donations
-            const donations = await UserService.getFundDonations(fundName, 10);
+            // Lấy leaderboard donations - hiển thị tất cả
+            const donations = await interaction.client.prismaService.getFundDonations(fundName, 50);
 
-            // Tạo embed hiển thị thông tin quỹ
+            // Tạo embed hiển thị thông tin quỹ với layout thoáng đẹp
             const embed = new EmbedBuilder()
                 .setColor('#386641')
                 .setTitle(`🏛️ ${fund.name}`)
-                .setDescription(fund.description)
+                .setDescription(`*${fund.description}*\n\u2000`)
                 .addFields(
                     {
-                        name: '💰 Tổng Donations',
-                        value: `**${fund.total_donated.toLocaleString()} MĐCoin** | **${fund.total_donated_vip.toLocaleString()} MĐV**`,
+                        name: '💵 Tổng Quyên Góp',
+                        value: `**${(fund.total_donated || 0).toLocaleString()}** MĐCoin\n**${(fund.total_donated_vip || 0).toLocaleString()}** MĐV\n\u2000`,
                         inline: true
                     },
                     {
-                        name: '📊 Tổng Contributors',
-                        value: `**${donations.length}** người`,
+                        name: '📊 Tổng Đóng Góp',
+                        value: `**${donations.length}** người tham gia\n\u2000`,
                         inline: true
                     },
                     {
                         name: '📅 Ngày Tạo',
-                        value: new Date(fund.created_at).toLocaleDateString('vi-VN'),
+                        value: `${new Date(fund.created_at).toLocaleDateString('vi-VN')}\n\u2000`,
                         inline: true
                     }
                 )
@@ -91,8 +91,8 @@ module.exports = {
 
             if (donations.length === 0) {
                 embed.addFields({
-                    name: '🎯 Trở Thành Người Đầu Tiên!',
-                    value: `Chưa có ai donate cho quỹ này. Hãy sử dụng \`/donate fund:${fundName}\` để trở thành người đầu tiên!`,
+                    name: '💗 Trở Thành Người Đầu Tiên!',
+                    value: `Chưa có ai quyên góp cho quỹ này.\n\u2000\n🎯 Hãy sử dụng \`/donate fund:${fundName}\` để trở thành người đầu tiên!\n\u2000`,
                     inline: false
                 });
             } else {
@@ -118,21 +118,43 @@ module.exports = {
                     const lastDonation = new Date(donation.last_donation).toLocaleDateString('vi-VN');
 
                     leaderboardText += `${medal} **${displayName}**\n`;
-                    leaderboardText += `${donation.total_donated.toLocaleString()} MĐC | ${donation.total_donated_vip.toLocaleString()} MĐV | ${donation.donation_count} lần\n`;
-                    leaderboardText += `📅 Gần nhất: ${lastDonation}\n\n`;
+                    leaderboardText += `💵 **${donation.total_donated.toLocaleString()}** MĐC • 💴 **${donation.total_donated_vip.toLocaleString()}** MĐV\n\u2000\n\u2000\n`;
                 }
 
-                embed.addFields({
-                    name: '🏆 Top Contributors',
-                    value: leaderboardText.slice(0, 1024), // Discord limit 1024 chars per field
-                    inline: false
-                });
+                // Chia leaderboard thành các field nhỏ để hiển thị nhiều người hơn
+                const maxPerField = 8; // Khoảng 8 người mỗi field để đảm bảo không vượt 1024 chars
+                
+                for (let fieldIndex = 0; fieldIndex < Math.ceil(donations.length / maxPerField); fieldIndex++) {
+                    const startIndex = fieldIndex * maxPerField;
+                    const endIndex = Math.min(startIndex + maxPerField, donations.length);
+                    const fieldDonations = donations.slice(startIndex, endIndex);
+                    
+                    let fieldText = '';
+                    fieldDonations.forEach((donation, index) => {
+                        const rank = startIndex + index + 1;
+                        const medal = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : '🏅';
+                        
+                        // Tạo display name
+                        let displayName = `<@${donation.donor_id}>`;
+                        
+                        fieldText += `${medal} **${displayName}**\n`;
+                        fieldText += `💵 **${donation.total_donated.toLocaleString()}** MĐC • 💴 **${donation.total_donated_vip.toLocaleString()}** MĐV\n\u2000\n`;
+                    });
+                    
+                    const fieldName = fieldIndex === 0 ? '🏆 Bảng Xếp Hạng Đóng Góp' : `🏆 Bảng Xếp Hạng (tiếp)`;
+                    
+                    embed.addFields({
+                        name: fieldName,
+                        value: fieldText || 'Chưa có dữ liệu\n\u2000',
+                        inline: false
+                    });
+                }
             }
 
-            // Thêm hướng dẫn donation
+            // Thêm hướng dẫn donation với khoảng trống
             embed.addFields({
-                name: '💡 Hướng Dẫn Donate',
-                value: `\`/donate fund:${fundName} mdcoin:100 mdv:50 reason:"Ủng hộ"\``,
+                name: '💡 Cách Quyên Góp',
+                value: `\`/donate fund:${fundName} mdcoin:100 mdv:50 reason:"Ủng hộ"\`\n\u2000\n🎯 **Mẹo**: Bạn có thể donate chỉ MĐC, chỉ MĐV, hoặc cả hai!\n\u2000`,
                 inline: false
             });
 
@@ -143,15 +165,15 @@ module.exports = {
 
             const errorEmbed = new EmbedBuilder()
                 .setColor('#FF6B6B')
-                .setTitle('❌ Lỗi')
-                .setDescription('Có lỗi xảy ra khi lấy thông tin quỹ. Vui lòng thử lại sau.')
+                .setTitle('❌ Lỗi Hệ Thống')
+                .setDescription('Có lỗi xảy ra khi lấy thông tin quỹ.\n\u2000\n🔄 Vui lòng thử lại sau ít phút.\n\u2000')
                 .setTimestamp()
                 .setFooter({ text: 'MDHH Community • Fund System' });
 
             if (interaction.replied || interaction.deferred) {
                 await interaction.editReply({ embeds: [errorEmbed] });
             } else {
-                await interaction.reply({ embeds: [errorEmbed], flags: 64 });
+                await interaction.reply({ embeds: [errorEmbed], flags: MessageFlags.Ephemeral });
             }
         }
     },
