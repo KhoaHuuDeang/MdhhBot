@@ -186,7 +186,7 @@ client.once('clientReady', async () => {
             let minutesLeft = 60;
             let countdownMessage = null
             let coin = 0;
-            countdownMessage = await currentChannel.send(`<a:a_g_Cheer:1301431655503892531> Xinn chào bạn học ${thisTime.member.displayName}! Từ bây giờ nếu bạn tham gia VC, mỗi 1 tiếng học sẽ quy đổi ra thành một 1MĐ Coin Yay ! \n Bạn còn **${minutesLeft}** phút để nhận thưởng ! \n trong phiên học này bạn đã kiếm được **${coin} MĐCoin!**`);
+            countdownMessage = await currentChannel.send(`<:p_welcome:1301432905872052244> Xinn chào bạn học ${thisTime.member.displayName}! Từ bây giờ nếu bạn tham gia VC, mỗi 1 tiếng học sẽ quy đổi ra thành một 1MĐ Coin Yay ! \n Bạn còn **${minutesLeft}** phút để nhận thưởng ! \n trong phiên học này bạn đã kiếm được **${coin} MĐCoin!**`);
             const countdownTimer = setInterval(async () => {
                 minutesLeft--
                 await countdownMessage.edit(`<a:a_g_Cheer:1301431655503892531> Xin chào bạn học ${thisTime.member.displayName}! Từ bây giờ nếu bạn tham gia VC, mỗi 1 tiếng học sẽ quy đổi ra thành một 1MĐ Coin Yay ! \n Bạn còn **${minutesLeft}** phút để nhận thưởng ! \n trong phiên học này bạn đã kiếm được **${coin} MĐCoin!**`);
@@ -201,6 +201,47 @@ client.once('clientReady', async () => {
             channelSession.set(user.id, { currentChannel, timmer, balance, countdownTimer, countdownMessage })
         }
 
+        // User chuyển từ voice channel này sang voice channel khác (không qua intermediate channel)
+        if (lastTime.channelId && thisTime.channelId && 
+            lastTime.channelId !== '1357199605955039363' && 
+            thisTime.channelId !== '1357199605955039363' && 
+            lastTime.channelId !== thisTime.channelId) {
+            
+            console.log(`User ${user.tag} switching from ${lastTime.channelId} to ${thisTime.channelId}`);
+            
+            // Cleanup old session
+            const oldData = channelSession.get(user.id);
+            if (oldData) {
+                clearInterval(oldData.countdownTimer); // stop UI countdown
+                clearInterval(oldData.timmer);         // stop DB update
+                if (oldData.countdownMessage) {
+                    await oldData.countdownMessage.delete().catch(console.error);
+                }
+                console.log(`Cleanup intervals for ${user.id} - channel switch`);
+            }
+            
+            // Start new session in new channel
+            let currentChannel = thisTime.channel;
+            const timmer = countDown(user.id, prismaService);
+            
+            let minutesLeft = 60;
+            let countdownMessage = null;
+            let coin = 0;
+            countdownMessage = await currentChannel.send(`<:p_welcome:1301432905872052244> ${thisTime.member.displayName} chuyển phòng học! có vẻ như voice này có gì đó thú vị, tiếp tục cày coin nào ! \n Bạn còn **${minutesLeft}** phút để nhận thưởng ! \n trong phiên học này bạn đã kiếm được **${coin} MĐCoin!**`);
+            const countdownTimer = setInterval(async () => {
+                minutesLeft--;
+                await countdownMessage.edit(`<a:a_g_Cheer:1301431655503892531> ${thisTime.member.displayName} đang học tại ${currentChannel.name}! \n Bạn còn **${minutesLeft}** phút để nhận thưởng ! \n trong phiên học này bạn đã kiếm được **${coin} MĐCoin!**`);
+
+                if (minutesLeft === 0) {
+                    coin++;
+                    await currentChannel.send(`<a:a_b_gojotwerk:1288783436718411776> ${thisTime.member.displayName} +1 MĐCoin!`);
+                    minutesLeft = 60; // Reset để đếm tiếp
+                }
+            }, 60 * 1000);
+
+            channelSession.set(user.id, { currentChannel, timmer, balance, countdownTimer, countdownMessage });
+        }
+
         // User rời voice
         if (lastTime.channelId && !thisTime.channelId) {
             const data = channelSession.get(user.id);
@@ -209,7 +250,7 @@ client.once('clientReady', async () => {
                 clearInterval(data.timmer);         // stop DB update
                 channelSession.delete(user.id);
                 if (data.countdownMessage) {
-                    await data.countdownMessage.delete()
+                    await data.countdownMessage.delete().catch(console.error);
                 }
 
                 console.log(`Cleanup intervals for ${user.id}`);
