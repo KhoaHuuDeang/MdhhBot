@@ -432,10 +432,10 @@ class PrismaService {
     return await this.prisma.$transaction(async (tx) => {
       // Ensure user exists
       await tx.users.upsert({
-        where: { user_id },
+        where: { user_id: userId },
         update: {},
         create: {
-          user_id,
+          user_id: userId,
           balance: 0,
           balance_vip: 0,
           total_earned: 0,
@@ -449,7 +449,7 @@ class PrismaService {
         throw new Error('Already checked in today');
       }
 
-      const today = new Date().toISOString().split('T')[0];
+      const today = new Date();
       let newStreak = 1;
 
       if (checkinStatus.exists) {
@@ -470,14 +470,14 @@ class PrismaService {
 
       // Update or create checkin record
       await tx.daily_checkins.upsert({
-        where: { user_id },
+        where: { user_id: userId },
         update: {
           last_checkin_date: today,
           current_streak: newStreak,
           total_checkins: { increment: 1 }
         },
         create: {
-          user_id,
+          user_id: userId,
           last_checkin_date: today,
           current_streak: newStreak,
           total_checkins: 1
@@ -486,10 +486,10 @@ class PrismaService {
 
       // Add daily reward
       await tx.users.update({
-        where: { user_id },
+        where: { user_id: userId },
         data: {
-          balance: { increment: reward_amount },
-          total_earned: { increment: reward_amount }
+          balance: { increment: rewardAmount },
+          total_earned: { increment: rewardAmount }
         }
       });
 
@@ -497,14 +497,14 @@ class PrismaService {
       await tx.transactions.create({
         data: {
           to_user_id: userId,
-          amount: reward_amount,
+          amount: rewardAmount,
           type: 'daily_checkin',
           description: `Daily checkin Day ${newStreak}`
         }
       });
 
       return {
-        reward: reward_amount,
+        reward: rewardAmount,
         streak: newStreak,
         total_checkins: checkinStatus.exists ? checkinStatus.totalCheckins + 1 : 1
       };
