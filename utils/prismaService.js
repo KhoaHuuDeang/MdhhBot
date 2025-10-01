@@ -540,14 +540,14 @@ class PrismaService {
       // Create transaction log
       await tx.transactions.create({
         data: {
-          to_user_id: userId,
+          to_user_id: user_id,
           amount,
           type: 'invite_reward',
           description
         }
       });
 
-      console.log(`🎁 ${userId} received ${amount} MĐC from invite reward`);
+      console.log(`🎁 ${user_id} received ${amount} MĐC from invite reward`);
       return true;
     });
   }
@@ -748,7 +748,7 @@ class PrismaService {
       await this.addInviteReward(
         inviter.id,
         reward,
-        `Invited ${newMember.user.tag} using code ${inviteCode}`
+        `Invited ${newMember.user.tag} using code ${invite_code}`
       );
 
       // Record invite reward in database
@@ -756,7 +756,7 @@ class PrismaService {
         data: {
           inviter_id: inviter.id,
           invitee_id: newMember.user.id,
-          invite_code: inviteCode,
+          invite_code: invite_code,
           reward_amount: reward
         }
       });

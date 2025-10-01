@@ -71,24 +71,24 @@ module.exports = {
 
             // Lưu thông tin user thực tế vào database (override bot inviter)
             try {
-                const { pool } = require('../db/database');
-                await pool.query(`
-                    INSERT INTO invites (code, inviter_id, uses, max_uses, expires_at, created_at, updated_at)
-                    VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP)
-                    ON CONFLICT (code) DO UPDATE SET
-                        inviter_id = $2,
-                        uses = $3,
-                        max_uses = $4,
-                        expires_at = $5,
-                        updated_at = CURRENT_TIMESTAMP
-                `, [
-                    invite.code,
-                    interaction.user.id, // User thực tế, không phải bot
-                    invite.uses || 0,
-                    invite.maxUses || 0,
-                    invite.expiresAt,
-                    invite.createdAt
-                ]);
+                await interaction.client.prismaService.prisma.invites.upsert({
+                    where: { code: invite.code },
+                    update: {
+                        inviter_id: interaction.user.id, // User thực tế, không phải bot
+                        uses: invite.uses || 0,
+                        max_uses: invite.maxUses || 0,
+                        expires_at: invite.expiresAt,
+                        updated_at: new Date()
+                    },
+                    create: {
+                        code: invite.code,
+                        inviter_id: interaction.user.id, // User thực tế, không phải bot
+                        uses: invite.uses || 0,
+                        max_uses: invite.maxUses || 0,
+                        expires_at: invite.expiresAt,
+                        created_at: invite.createdAt || new Date()
+                    }
+                });
                 
                 console.log(`📝 Saved invite ${invite.code} with real inviter: ${interaction.user.tag}`);
             } catch (dbError) {
