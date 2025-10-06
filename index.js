@@ -174,6 +174,18 @@ client.once('clientReady', async () => {
         // có user trong database thì mới check được 
         let balance = await prismaService.getUserBalance(user.id)
 
+        // ✅ GLOBAL CLEANUP FIRST - đảm bảo không có timer nào còn chạy cho user này
+        const existingData = channelSession.get(user.id);
+        if (existingData) {
+            clearInterval(existingData.countdownTimer);
+            clearInterval(existingData.timmer);
+            if (existingData.countdownMessage) {
+                await existingData.countdownMessage.delete().catch(console.error);
+            }
+            channelSession.delete(user.id);
+            console.log(`🧹 Force cleanup for ${user.id} before processing voice update`);
+        }
+
         // User join voice (standard) - exclude intermediate channel
         if (thisTime.channelId && thisTime.channelId !== '1357199605955039363' && (!lastTime.channelId || lastTime.channelId === '1357199605955039363')) {
             //lấy ra channel user join hiện tại
@@ -189,7 +201,12 @@ client.once('clientReady', async () => {
             countdownMessage = await currentChannel.send(`<:p_welcome:1301432905872052244> Xinn chào bạn học ${thisTime.member.displayName}! Từ bây giờ nếu bạn tham gia VC, mỗi 1 tiếng học sẽ quy đổi ra thành một 1MĐ Coin Yay ! \n Bạn còn **${minutesLeft}** phút để nhận thưởng ! \n trong phiên học này bạn đã kiếm được **${coin} MĐCoin!**`);
             const countdownTimer = setInterval(async () => {
                 minutesLeft--
-                await countdownMessage.edit(`<a:a_g_Cheer:1301431655503892531> Xin chào bạn học ${thisTime.member.displayName}! Từ bây giờ nếu bạn tham gia VC, mỗi 1 tiếng học sẽ quy đổi ra thành một 1MĐ Coin Yay ! \n Bạn còn **${minutesLeft}** phút để nhận thưởng ! \n trong phiên học này bạn đã kiếm được **${coin} MĐCoin!**`);
+                try {
+                    await countdownMessage.edit(`<a:a_g_Cheer:1301431655503892531> Xin chào bạn học ${thisTime.member.displayName}! Từ bây giờ nếu bạn tham gia VC, mỗi 1 tiếng học sẽ quy đổi ra thành một 1MĐ Coin Yay ! \n Bạn còn **${minutesLeft}** phút để nhận thưởng ! \n trong phiên học này bạn đã kiếm được **${coin} MĐCoin!**`);
+                } catch (error) {
+                    console.error(`❌ Failed to edit countdown message for ${user.id}:`, error.message);
+                    // Không crash bot nếu message edit fails
+                }
 
                 if (minutesLeft === 0) {
                     coin++
@@ -209,16 +226,8 @@ client.once('clientReady', async () => {
             
             console.log(`User ${user.tag} switching from ${lastTime.channelId} to ${thisTime.channelId}`);
             
-            // Cleanup old session
-            const oldData = channelSession.get(user.id);
-            if (oldData) {
-                clearInterval(oldData.countdownTimer); // stop UI countdown
-                clearInterval(oldData.timmer);         // stop DB update
-                if (oldData.countdownMessage) {
-                    await oldData.countdownMessage.delete().catch(console.error);
-                }
-                console.log(`Cleanup intervals for ${user.id} - channel switch`);
-            }
+            // ✅ Global cleanup đã được thực hiện ở đầu function, không cần cleanup riêng nữa
+            // Note: Cleanup was already done at the start of this function to prevent multiple timers
             
             // Start new session in new channel
             let currentChannel = thisTime.channel;
@@ -230,7 +239,12 @@ client.once('clientReady', async () => {
             countdownMessage = await currentChannel.send(`<:p_welcome:1301432905872052244> ${thisTime.member.displayName} chuyển phòng học! có vẻ như voice này có gì đó thú vị, tiếp tục cày coin nào ! \n Bạn còn **${minutesLeft}** phút để nhận thưởng ! \n trong phiên học này bạn đã kiếm được **${coin} MĐCoin!**`);
             const countdownTimer = setInterval(async () => {
                 minutesLeft--;
-                await countdownMessage.edit(`<a:a_g_Cheer:1301431655503892531> ${thisTime.member.displayName} đang học tại ${currentChannel.name}! \n Bạn còn **${minutesLeft}** phút để nhận thưởng ! \n trong phiên học này bạn đã kiếm được **${coin} MĐCoin!**`);
+                try {
+                    await countdownMessage.edit(`<a:a_g_Cheer:1301431655503892531> ${thisTime.member.displayName} đang học tại ${currentChannel.name}! \n Bạn còn **${minutesLeft}** phút để nhận thưởng ! \n trong phiên học này bạn đã kiếm được **${coin} MĐCoin!**`);
+                } catch (error) {
+                    console.error(`❌ Failed to edit countdown message for ${user.id}:`, error.message);
+                    // Không crash bot nếu message edit fails
+                }
 
                 if (minutesLeft === 0) {
                     coin++;
@@ -244,17 +258,9 @@ client.once('clientReady', async () => {
 
         // User rời voice
         if (lastTime.channelId && !thisTime.channelId) {
-            const data = channelSession.get(user.id);
-            if (data) {
-                clearInterval(data.countdownTimer); // stop UI countdown
-                clearInterval(data.timmer);         // stop DB update
-                channelSession.delete(user.id);
-                if (data.countdownMessage) {
-                    await data.countdownMessage.delete().catch(console.error);
-                }
-
-                console.log(`Cleanup intervals for ${user.id}`);
-            }
+            // ✅ Global cleanup đã được thực hiện ở đầu function
+            // Note: Cleanup was already done at the start of this function
+            console.log(`Cleanup intervals for ${user.id}`);
         }
 
         // // Xác định user bấm vào sự kiện tạo phòng với id được quy ước như dưới 
