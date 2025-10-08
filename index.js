@@ -1,5 +1,7 @@
 require('dotenv').config(); // Load biến môi trường
 const { Client, GatewayIntentBits, Collection, Events, MessageFlags } = require('discord.js'); // Import Discord.js
+const { joinVoiceChannel, createAudioPlayer, createAudioResource, AudioPlayerStatus, VoiceConnectionStatus } = require('@discordjs/voice');
+const ffmpegPath = require('ffmpeg-static');
 
 const fs = require('node:fs');
 const path = require('node:path');
@@ -158,6 +160,68 @@ client.once('clientReady', async () => {
 
     //khởi tạo map, lưu thông tin user
 
+    // Helper function to play audio file in voice channel
+    async function playAudio(channel, audioFile) {
+        try {
+            // Check if user is in voice channel
+            const voiceChannel = channel;
+            if (!voiceChannel || voiceChannel.type !== 2) { // 2 = GUILD_VOICE
+                console.log(`Cannot play audio: ${channel.name} is not a voice channel`);
+                return;
+            }
+
+            // Join voice channel
+            const connection = joinVoiceChannel({
+                channelId: voiceChannel.id,
+                guildId: voiceChannel.guild.id,
+                adapterCreator: voiceChannel.guild.voiceAdapterCreator,
+            });
+
+            // Wait for connection to be ready
+            connection.on(VoiceConnectionStatus.Ready, () => {
+                console.log(`Voice connection ready in ${voiceChannel.name}`);
+            });
+
+            // Create audio player and resource
+            const player = createAudioPlayer();
+            const audioPath = path.join(__dirname, audioFile);
+
+            if (!fs.existsSync(audioPath)) {
+                console.error(`Audio file not found: ${audioPath}`);
+                await channel.send(`File âm thanh không tồn tại: ${audioFile}`);
+                return;
+            }
+
+            // Use ffmpeg-static for audio processing
+            const resource = createAudioResource(audioPath, {
+                metadata: {
+                    title: audioFile,
+                }
+            });
+
+            // Play audio
+            player.play(resource);
+            connection.subscribe(player);
+            console.log(`Playing audio: ${audioFile} in ${voiceChannel.name}`);
+
+            // Auto-disconnect after audio finishes
+            player.on(AudioPlayerStatus.Idle, () => {
+                connection.destroy();
+                console.log(`Audio finished, disconnected from ${voiceChannel.name}`);
+            });
+
+            // Handle errors
+            player.on('error', error => {
+                console.error(`Audio player error:`, error);
+                connection.destroy();
+            });
+
+        } catch (error) {
+            console.error(`Failed to play audio ${audioFile}:`, error);
+            await channel.send(`Lỗi khi phát âm thanh: ${error.message}`);
+        }
+    }
+
     // Lắng nghe sự kiện voice
     client.on('voiceStateUpdate', async (lastTime, thisTime) => {
         console.log(`Voice state updated: ${lastTime.channelId} -> ${thisTime.channelId}`);
@@ -175,15 +239,25 @@ client.once('clientReady', async () => {
         let balance = await prismaService.getUserBalance(user.id)
 
         // ✅ GLOBAL CLEANUP FIRST - đảm bảo không có timer nào còn chạy cho user này
+        // NEW: Lưu sessionCounter và totalMinutes trước khi cleanup
+        let preservedSessionCounter = 1;
+        let preservedTotalMinutes = 0;
+        let preservedCoin = 0;
+
         const existingData = channelSession.get(user.id);
         if (existingData) {
+            // NEW: Lưu dữ liệu quan trọng trước khi cleanup
+            preservedSessionCounter = existingData.sessionCounter || 1;
+            preservedTotalMinutes = existingData.totalMinutes || 0;
+            preservedCoin = existingData.coin || 0;
+
             clearInterval(existingData.countdownTimer);
             clearInterval(existingData.timmer);
             if (existingData.countdownMessage) {
                 await existingData.countdownMessage.delete().catch(console.error);
             }
             channelSession.delete(user.id);
-            console.log(`🧹 Force cleanup for ${user.id} before processing voice update`);
+            console.log(`🧹 Force cleanup for ${user.id} before processing voice update - preserved session: ${preservedSessionCounter}, total time: ${preservedTotalMinutes}m`);
         }
 
         // User join voice (standard) - exclude intermediate channel
@@ -198,49 +272,36 @@ client.once('clientReady', async () => {
             let minutesLeft = 60;
             let countdownMessage = null
             let coin = 0;
-            countdownMessage = await currentChannel.send(`<:p_welcome:1301432905872052244> Xinn chào bạn học ${thisTime.member.displayName}! Từ bây giờ nếu bạn tham gia VC, mỗi 1 tiếng học sẽ quy đổi ra thành một 1MĐ Coin Yay ! \n Bạn còn **${minutesLeft}** phút để nhận thưởng ! \n trong phiên học này bạn đã kiếm được **${coin} MĐCoin!**`);
-            const countdownTimer = setInterval(async () => {
-                minutesLeft--
-                try {
-                    await countdownMessage.edit(`<a:a_g_Cheer:1301431655503892531> Xin chào bạn học ${thisTime.member.displayName}! Từ bây giờ nếu bạn tham gia VC, mỗi 1 tiếng học sẽ quy đổi ra thành một 1MĐ Coin Yay ! \n Bạn còn **${minutesLeft}** phút để nhận thưởng ! \n trong phiên học này bạn đã kiếm được **${coin} MĐCoin!**`);
-                } catch (error) {
-                    console.error(`❌ Failed to edit countdown message for ${user.id}:`, error.message);
-                    // Không crash bot nếu message edit fails
-                }
-
-                if (minutesLeft === 0) {
-                    coin++
-                    await currentChannel.send(`<a:a_b_gojotwerk:1288783436718411776> ${thisTime.member.displayName} +1 MĐCoin!`);
-                    minutesLeft = 60; // Reset để đếm tiếp
-                }
-            }, 60 * 1000);
-
-            channelSession.set(user.id, { currentChannel, timmer, balance, countdownTimer, countdownMessage })
-        }
-
-        // User chuyển từ voice channel này sang voice channel khác (không qua intermediate channel)
-        if (lastTime.channelId && thisTime.channelId && 
-            lastTime.channelId !== '1357199605955039363' && 
-            thisTime.channelId !== '1357199605955039363' && 
-            lastTime.channelId !== thisTime.channelId) {
-            
-            console.log(`User ${user.tag} switching from ${lastTime.channelId} to ${thisTime.channelId}`);
-            
-            // ✅ Global cleanup đã được thực hiện ở đầu function, không cần cleanup riêng nữa
-            // Note: Cleanup was already done at the start of this function to prevent multiple timers
-            
-            // Start new session in new channel
-            let currentChannel = thisTime.channel;
-            const timmer = countDown(user.id, prismaService);
-            
-            let minutesLeft = 60;
-            let countdownMessage = null;
-            let coin = 0;
-            countdownMessage = await currentChannel.send(`<:p_welcome:1301432905872052244> ${thisTime.member.displayName} chuyển phòng học! có vẻ như voice này có gì đó thú vị, tiếp tục cày coin nào ! \n Bạn còn **${minutesLeft}** phút để nhận thưởng ! \n trong phiên học này bạn đã kiếm được **${coin} MĐCoin!**`);
+            let sessionCounter = 1; // NEW: Bộ đếm session bắt đầu từ 1
+            let totalMinutes = 0; // NEW: Tổng số phút đã học
+            countdownMessage = await currentChannel.send(`<a:a_g_Cheer:1301431655503892531> Xinn chào bạn học ${thisTime.member.displayName} Từ bây giờ nếu bạn tham gia VC, mỗi 1 tiếng học sẽ quy đổi ra thành một 1MĐ Coin Yay !`);
             const countdownTimer = setInterval(async () => {
                 minutesLeft--;
+                totalMinutes++; // NEW: Tăng tổng số phút
+
                 try {
-                    await countdownMessage.edit(`<a:a_g_Cheer:1301431655503892531> ${thisTime.member.displayName} đang học tại ${currentChannel.name}! \n Bạn còn **${minutesLeft}** phút để nhận thưởng ! \n trong phiên học này bạn đã kiếm được **${coin} MĐCoin!**`);
+                    // NEW: Kiểm tra kick user ở 4h5p (245 phút)
+                    if (totalMinutes >= 245) {
+                        await currentChannel.send(`<:p_tinhtam:1385515547990687755>**Bạn đã học liên tục 4 tiếng rồi đấy !,** ${thisTime.member.displayName}  Hãy nghỉ ngơi! và ra ngoài chạm cỏ đi nhé`);
+                        try {
+                            await thisTime.member.voice.disconnect('Đã học quá 4 giờ - cần nghỉ ngơi!');
+                            console.log(`⚠️ Kicked user ${user.tag} after 4h5m of study time`);
+                        } catch (kickError) {
+                            console.error(`❌ Failed to kick user ${user.id}:`, kickError);
+                        }
+                        return;
+                    }
+
+                    // NEW: Logic audio playback
+                    if (sessionCounter === 30 && minutesLeft === 3) {
+                        await playAudio(currentChannel, '30.mp3');
+                        await countdownMessage.edit(`<:p_tinhtam:1385515547990687755> Bạn đã học được 3 tiếng 30p, ${thisTime.member.displayName} - còn ${minutesLeft} phút nữa để giải lao`);
+                    } else if (sessionCounter === 4) {
+                        await playAudio(currentChannel, '4.mp3');
+                        await countdownMessage.edit(`<:p_tinhtam:1385515547990687755> Chúc mừng bạn đã hoàn thành 4 tiếng học liên tục, ${thisTime.member.displayName} hãy nghỉ nghơi và ra ngoài chạm cỏ đi nhé !\n trong phiên học này bạn đã kiếm được ${coin} MĐCoin (Phiên #${sessionCounter}) - Tổng: ${Math.floor(totalMinutes / 60)}h${totalMinutes % 60}m`);
+                    } else {
+                        await countdownMessage.edit(`<a:a_g_Cheer:1301431655503892531> Xin chào bạn học ${thisTime.member.displayName} Từ bây giờ nếu bạn tham gia VC, mỗi 1 tiếng học sẽ quy đổi ra thành một 1MĐ Coin Yay \n Bạn còn ${minutesLeft} phút để nhận thưởng`);
+                    }
                 } catch (error) {
                     console.error(`❌ Failed to edit countdown message for ${user.id}:`, error.message);
                     // Không crash bot nếu message edit fails
@@ -248,12 +309,83 @@ client.once('clientReady', async () => {
 
                 if (minutesLeft === 0) {
                     coin++;
-                    await currentChannel.send(`<a:a_b_gojotwerk:1288783436718411776> ${thisTime.member.displayName} +1 MĐCoin!`);
+                    sessionCounter++; // NEW: Tăng bộ đếm phiên
+                    await currentChannel.send(`<a:a_b_gojotwerk:1288783436718411776> ${thisTime.member.displayName} +1 MĐCoin! (Hoàn thành phiên #${sessionCounter - 1})`);
                     minutesLeft = 60; // Reset để đếm tiếp
+                    console.log(`📊 User ${user.id} completed session #${sessionCounter - 1}, now on session #${sessionCounter}, total time: ${Math.floor(totalMinutes / 60)}h${totalMinutes % 60}m`);
                 }
             }, 60 * 1000);
 
-            channelSession.set(user.id, { currentChannel, timmer, balance, countdownTimer, countdownMessage });
+            channelSession.set(user.id, { currentChannel, timmer, balance, countdownTimer, countdownMessage, sessionCounter, totalMinutes, coin })
+        }
+
+        // User chuyển từ voice channel này sang voice channel khác (không qua intermediate channel)
+        if (lastTime.channelId && thisTime.channelId &&
+            lastTime.channelId !== '1357199605955039363' &&
+            thisTime.channelId !== '1357199605955039363' &&
+            lastTime.channelId !== thisTime.channelId) {
+
+            console.log(`User ${user.tag} switching from ${lastTime.channelId} to ${thisTime.channelId}`);
+
+            // ✅ Global cleanup đã được thực hiện ở đầu function, không cần cleanup riêng nữa
+            // Note: Cleanup was already done at the start of this function to prevent multiple timers
+
+            // Define currentChannel for the new channel user switched to
+            let currentChannel = thisTime.channel;
+
+            // Xóa interval để cleanup tránh gọi infinite khi user out 
+            // muốn xóa interval thì phải có timmer, giữ nó lại truyền vào channelSession
+            const timmer = countDown(user.id, prismaService) // Pass prisma instance
+
+            // Start new session in new channel
+            let minutesLeft = 60;
+            let countdownMessage = null
+            let coin = 0;
+            let sessionCounter = 1; // NEW: Bộ đếm session bắt đầu từ 1
+            let totalMinutes = 0; // NEW: Tổng số phút đã học
+            countdownMessage = await currentChannel.send(`<a:a_g_Cheer:1301431655503892531> Xinn chào bạn học ${thisTime.member.displayName} Từ bây giờ nếu bạn tham gia VC, mỗi 1 tiếng học sẽ quy đổi ra thành một 1MĐ Coin Yay !`);
+            const countdownTimer = setInterval(async () => {
+                minutesLeft--;
+                totalMinutes++; // NEW: Tăng tổng số phút
+
+                try {
+                    // NEW: Kiểm tra kick user ở 4h5p (245 phút)
+                    if (totalMinutes >= 245) {
+                        await currentChannel.send(`<:p_tinhtam:1385515547990687755>**Bạn đã học liên tục 4 tiếng rồi đấy !,** ${thisTime.member.displayName}  Hãy nghỉ ngơi! và ra ngoài chạm cỏ đi nhé`);
+                        try {
+                            await thisTime.member.voice.disconnect('Đã học quá 4 giờ - cần nghỉ ngơi!');
+                            console.log(`⚠️ Kicked user ${user.tag} after 4h5m of study time`);
+                        } catch (kickError) {
+                            console.error(`❌ Failed to kick user ${user.id}:`, kickError);
+                        }
+                        return;
+                    }
+
+                    // NEW: Logic audio playback
+                    if (sessionCounter === 30 && minutesLeft === 3) {
+                        await playAudio(currentChannel, '30.mp3');
+                        await countdownMessage.edit(`<:p_tinhtam:1385515547990687755> Bạn đã học được 3 tiếng 30p, ${thisTime.member.displayName} - còn ${minutesLeft} phút nữa để giải lao`);
+                    } else if (sessionCounter === 4) {
+                        await playAudio(currentChannel, '4.mp3');
+                        await countdownMessage.edit(`<:p_tinhtam:1385515547990687755> Chúc mừng bạn đã hoàn thành 4 tiếng học liên tục, ${thisTime.member.displayName} hãy nghỉ nghơi và ra ngoài chạm cỏ đi nhé !\n trong phiên học này bạn đã kiếm được ${coin} MĐCoin (Phiên #${sessionCounter}) - Tổng: ${Math.floor(totalMinutes / 60)}h${totalMinutes % 60}m`);
+                    } else {
+                        await countdownMessage.edit(`<a:a_g_Cheer:1301431655503892531> Xin chào bạn học ${thisTime.member.displayName} Từ bây giờ nếu bạn tham gia VC, mỗi 1 tiếng học sẽ quy đổi ra thành một 1MĐ Coin Yay \n Bạn còn ${minutesLeft} phút để nhận thưởng`);
+                    }
+                } catch (error) {
+                    console.error(`❌ Failed to edit countdown message for ${user.id}:`, error.message);
+                    // Không crash bot nếu message edit fails
+                }
+
+                if (minutesLeft === 0) {
+                    coin++;
+                    sessionCounter++; // NEW: Tăng bộ đếm phiên
+                    await currentChannel.send(`<a:a_b_gojotwerk:1288783436718411776> ${thisTime.member.displayName} +1 MĐCoin!`);
+                    minutesLeft = 60; // Reset để đếm tiếp
+                    console.log(`📊 User ${user.id} completed session #${sessionCounter - 1}, now on session #${sessionCounter}, total time: ${Math.floor(totalMinutes / 60)}h${totalMinutes % 60}m`);
+                }
+            }, 60 * 1000);
+
+            channelSession.set(user.id, { currentChannel, timmer, balance, countdownTimer, countdownMessage, sessionCounter, totalMinutes, coin });
         }
 
         // User rời voice
@@ -287,7 +419,7 @@ client.on(Events.InteractionCreate, async interaction => {
     // Xử lý autocomplete interactions
     if (interaction.isAutocomplete()) {
         const command = client.commands.get(interaction.commandName);
-        
+
         if (!command) {
             console.error(`No command matching ${interaction.commandName} was found for autocomplete.`);
             return;
