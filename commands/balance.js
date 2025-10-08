@@ -93,7 +93,7 @@ module.exports = {
                 },
                 {
                     name: '<:f_glasses:1357211300538875945> Thời Gian Học',
-                    value: `~${Math.floor(userBalance.total_earned)} giờ`,
+                    value: `~${Math.round(userBalance.total_earned)} giờ`,
                     inline: true
                 }
             );
@@ -110,7 +110,7 @@ module.exports = {
 
             // Thêm progress bar cho việc học tập (visual engagement)
             if (userBalance.total_earned > 0) {
-                const studyHours = Math.floor(userBalance.total_earned / 720); // 720 = 60*12 (1 hour)
+                const studyHours = Math.round(userBalance.total_earned); // 1 MĐC = 1 giờ
                 let progressBar = '';
                 const barLength = 10;
                 const progress = Math.min(studyHours / 10, 1); // Max at 10 hours for full bar

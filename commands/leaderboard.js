@@ -63,17 +63,21 @@ module.exports = {
                 const position = i + 1;
 
                 // Lấy username từ Discord client
-                // let username = user.user_id;
+                let username = user.user_id;
                 const guild = interaction.guild;
                 try {
                     const member = guild.members.cache.get(user.user_id);
-                    const discordUser = await interaction.client.users.fetch(user.user_id);
-                    username = discordUser.username;
                     if (member) {
                         username = member.displayName;
                     } else {
                         const discordUser = await interaction.client.users.fetch(user.user_id);
                         username = discordUser.username;
+                    }
+                    
+                    // Làm sạch ký tự đặc biệt có thể gây lỗi hiển thị
+                    username = username.replace(/[^\x00-\x7F]/g, "?"); // Thay thế ký tự non-ASCII bằng ?
+                    if (username.length > 20) {
+                        username = username.substring(0, 17) + "...";
                     }
                 } catch (error) {
                     // Nếu không lấy được username, giữ nguyên user_id
@@ -83,7 +87,7 @@ module.exports = {
                 const value = type === 'balance' ? user.balance : user.total_earned;
                 const displayValue = type === 'balance' ?
                     `${value.toLocaleString()} MĐC` :
-                    `${value.toLocaleString()} MĐC (~${Math.floor(value / 12)} phút)`;
+                    `${value.toLocaleString()} MĐC (~${Math.round(value)} phút)`;
 
                 if (position <= 3) {
                     // Top 3 get special treatment
@@ -100,7 +104,7 @@ module.exports = {
             // Tạo embed với academic aesthetic
             const titleMap = {
                 'balance': 'Bảng Xếp Hạng MĐCoin',
-                'totalEarned': '🎓 Bảng Xếp Hạng Thời Gian Học'
+                'total_earned': '🎓 Bảng Xếp Hạng Thời Gian Học'
             };
 
             const embed = new EmbedBuilder()
@@ -116,7 +120,7 @@ module.exports = {
             // Add study streak indicator for total_earned type
             if (type === 'total_earned' && leaderboard.length > 0) {
                 const topUser = leaderboard[0];
-                const totalHours = Math.floor(topUser.total_earned / 720);
+                const totalHours = Math.round(topUser.total_earned); // 1 MĐC = 1 giờ
                 embed.addFields({
                     name: '⭐ Kỷ Lục Hiện Tại',
                     value: `Thành viên hàng đầu đã học **${totalHours} giờ**!`,
@@ -136,7 +140,7 @@ module.exports = {
                     if (!userInTop && currentUserValue > 0) {
                         const displayValue = type === 'balance' ?
                             `${currentUserValue.toLocaleString()} MĐC` :
-                            `${currentUserValue.toLocaleString()} MĐC (~${Math.floor(currentUserValue / 12)} phút)`;
+                            `${currentUserValue.toLocaleString()} MĐC (~${Math.round(currentUserValue)} phút)`;
 
                         embed.addFields({
                             name: '📍 Vị Trí Của Bạn',
