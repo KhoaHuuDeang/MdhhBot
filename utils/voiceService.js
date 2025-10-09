@@ -46,8 +46,15 @@ class VoiceService {
         return;
       }
 
+      // IMPORTANT: Check if there are users in the channel before joining
+      const membersInChannel = voiceChannel.members.filter(member => !member.user.bot).size;
+      if (membersInChannel === 0) {
+        console.log(`👻 [VoiceService] No users in ${voiceChannel.name}, skipping audio to prevent voice loops`);
+        return;
+      }
+
       // Join voice channel
-      console.log(`🔗 [VoiceService] Joining voice channel ${voiceChannel.name} (${voiceChannel.id})`);
+      console.log(`🔗 [VoiceService] Joining voice channel ${voiceChannel.name} (${voiceChannel.id}) with ${membersInChannel} users`);
       const connection = joinVoiceChannel({
         channelId: voiceChannel.id,
         guildId: voiceChannel.guild.id,

@@ -2,6 +2,8 @@ const { CONFIG, MESSAGES } = require('../constants');
 const countDown = require('./countDown');
 const voiceService = require('./voiceService');
 
+const FOUR_HOUR_MARK = CONFIG.TIME.SESSION_DURATION * 4; // 240 minutes
+
 class VoiceStateManager {
   constructor(prismaService) {
     this.prismaService = prismaService;
@@ -140,20 +142,38 @@ class VoiceStateManager {
 
     console.log(`🎉 [VoiceStateManager] Processing user ${isChannelSwitch ? 'channel switch' : 'join'} for ${user.tag} in ${currentChannel.name}`);
 
-    // Setup countdown timer
-    console.log(`⏲️ [VoiceStateManager] Setting up countdown timer for ${user.tag}`);
-    const timer = countDown(user.id, this.prismaService);
+    // Get existing session data if switching channels (to preserve progress)
+    const existingData = this.channelSession.get(user.id);
+    let preservedSessionCounter = 1;
+    let preservedTotalMinutes = 0;
+    let preservedCoin = 0;
 
+    if (isChannelSwitch && existingData) {
+      preservedSessionCounter = existingData.sessionCounter;
+      preservedTotalMinutes = existingData.totalMinutes;
+      preservedCoin = existingData.coin;
+      console.log(`🔄 [VoiceStateManager] Preserving session data: session #${preservedSessionCounter}, ${preservedTotalMinutes}min total, ${preservedCoin} coins`);
+    }
+
+    // Setup SINGLE timer for both earnings and countdown (every minute)
+    console.log(`⏲️ [VoiceStateManager] Setting up unified timer for ${user.tag}`);
+    
     // Initialize session data
     const sessionData = {
       currentChannel,
-      timer,
+      timer: null, // Will be set below
       balance: await this.prismaService.getUserBalance(user.id),
       countdownTimer: null,
       countdownMessage: null,
-      sessionCounter: 1,
-      totalMinutes: 0,
-      coin: 0
+      sessionCounter: preservedSessionCounter,
+      totalMinutes: preservedTotalMinutes,
+      coin: preservedCoin,
+      minutesInCurrentSession: 0, // Track minutes in current hour
+      lastEarningsTime: Date.now(), // Track last time we gave earnings
+      break30AudioPlayed: false,
+      break4AudioPlayed: false,
+      break30MessageSent: false,
+      break4MessageSent: false
     };
 
     console.log(`💾 [VoiceStateManager] Session data initialized for ${user.tag}:`, {
@@ -161,7 +181,8 @@ class VoiceStateManager {
       totalMinutes: sessionData.totalMinutes,
       coin: sessionData.coin,
       channel: currentChannel.name,
-      isChannelSwitch
+      isChannelSwitch,
+      minutesInCurrentSession: sessionData.minutesInCurrentSession
     });
 
     // Send welcome message
@@ -177,8 +198,8 @@ class VoiceStateManager {
       console.error(`❌ [VoiceStateManager] Failed to send welcome message:`, error);
     }
 
-    // Start countdown timer
-    console.log(`⏰ [VoiceStateManager] Starting countdown timer for ${user.tag}`);
+    // Start countdown timer (UNIFIED - handles both UI and earnings)
+    console.log(`⏰ [VoiceStateManager] Starting unified countdown timer for ${user.tag}`);
     sessionData.countdownTimer = this.startCountdownTimer(sessionData, thisTime);
 
     // Store session data
@@ -186,17 +207,18 @@ class VoiceStateManager {
     console.log(`✅ [VoiceStateManager] Session stored for ${user.tag}. Total sessions: ${this.channelSession.size}`);
   }
 
-  // Start countdown timer for user session
+  // Start countdown timer for user session (UNIFIED TIMER)
   startCountdownTimer(sessionData, thisTime) {
-    let minutesLeft = CONFIG.TIME.SESSION_DURATION;
-    console.log(`⏱️ [VoiceStateManager] Starting countdown with ${minutesLeft} minutes for ${thisTime.member.user.tag}`);
+    let minutesLeft = CONFIG.TIME.SESSION_DURATION - sessionData.minutesInCurrentSession;
+    console.log(`⏱️ [VoiceStateManager] Starting countdown with ${minutesLeft} minutes remaining in current session for ${thisTime.member.user.tag}`);
 
     return setInterval(async () => {
       try {
         minutesLeft--;
         sessionData.totalMinutes++;
+        sessionData.minutesInCurrentSession++;
         
-        console.log(`⏰ [VoiceStateManager] Timer tick for ${thisTime.member.user.tag}: ${minutesLeft}min left, ${sessionData.totalMinutes}min total`);
+        console.log(`⏰ [VoiceStateManager] Timer tick for ${thisTime.member.user.tag}: ${minutesLeft}min left in session, ${sessionData.totalMinutes}min total, session #${sessionData.sessionCounter}`);
 
         // Check if user should be kicked after 4h5m
         if (sessionData.totalMinutes >= CONFIG.TIME.MAX_STUDY_TIME) {
@@ -206,16 +228,27 @@ class VoiceStateManager {
         }
 
         // Handle audio playback based on session progress
-        await this.handleSessionAudio(sessionData, thisTime, minutesLeft);
+        await this.handleSessionAudio(sessionData, thisTime);
 
         // Update countdown message
         await this.updateCountdownMessage(sessionData, thisTime, minutesLeft);
 
-        // Complete session when timer reaches 0
+        // Complete session when timer reaches 0 (60 minutes)
         if (minutesLeft === 0) {
           console.log(`🎯 [VoiceStateManager] Session completed for ${thisTime.member.user.tag} - session #${sessionData.sessionCounter}`);
+          
+          // Give database earnings (1 MĐC per hour)
+          try {
+            await this.prismaService.addVoiceEarnings(thisTime.member.user.id, 1);
+            console.log(`💰 [VoiceStateManager] Awarded 1 MĐC to ${thisTime.member.user.tag} for completing session #${sessionData.sessionCounter}`);
+          } catch (error) {
+            console.error(`❌ [VoiceStateManager] Error awarding earnings to ${thisTime.member.user.tag}:`, error);
+          }
+          
           await this.completeSession(sessionData, thisTime);
-          minutesLeft = CONFIG.TIME.SESSION_DURATION; // Reset for next session
+          minutesLeft = CONFIG.TIME.SESSION_DURATION; // Reset to 60 minutes
+          sessionData.minutesInCurrentSession = 0; // Reset current session minutes
+          sessionData.lastEarningsTime = Date.now(); // Update earnings time
         }
 
       } catch (error) {
@@ -226,15 +259,16 @@ class VoiceStateManager {
   }
 
   // Handle audio playback during session
-  async handleSessionAudio(sessionData, thisTime, minutesLeft) {
-    // Play break reminder audio at 3h30m with 3 minutes left
-    if (sessionData.sessionCounter === 30 && minutesLeft === 3) {
-      console.log(`🎵 [VoiceStateManager] Playing 3h30m break audio for ${thisTime.member.user.tag}`);
+  async handleSessionAudio(sessionData, thisTime) {
+    const { totalMinutes } = sessionData;
+
+    if (!sessionData.break30AudioPlayed && totalMinutes === CONFIG.TIME.BREAK_WARNING_TIME) {
+      sessionData.break30AudioPlayed = true;
+      console.log(`?? [VoiceStateManager] Playing 3h30m break audio for ${thisTime.member.user.tag}`);
       await voiceService.playAudio(sessionData.currentChannel, CONFIG.AUDIO.BREAK_30MIN);
-    }
-    // Play 4-hour completion audio
-    else if (sessionData.sessionCounter === 4) {
-      console.log(`🎵 [VoiceStateManager] Playing 4h completion audio for ${thisTime.member.user.tag}`);
+    } else if (!sessionData.break4AudioPlayed && totalMinutes === FOUR_HOUR_MARK) {
+      sessionData.break4AudioPlayed = true;
+      console.log(`?? [VoiceStateManager] Playing 4h completion audio for ${thisTime.member.user.tag}`);
       await voiceService.playAudio(sessionData.currentChannel, CONFIG.AUDIO.BREAK_4HOUR);
     }
   }
@@ -244,13 +278,19 @@ class VoiceStateManager {
     if (!sessionData.countdownMessage) return;
 
     try {
+      const totalMinutes = sessionData.totalMinutes;
       let messageContent;
 
-      if (sessionData.sessionCounter === 30 && minutesLeft === 3) {
-        messageContent = MESSAGES.VOICE.BREAK_WARNING_3H30(thisTime.member.displayName, minutesLeft);
-      } else if (sessionData.sessionCounter === 4) {
-        const totalHours = Math.floor(sessionData.totalMinutes / 60);
-        const totalMins = sessionData.totalMinutes % 60;
+      if (!sessionData.break30MessageSent && totalMinutes === CONFIG.TIME.BREAK_WARNING_TIME) {
+        sessionData.break30MessageSent = true;
+        messageContent = MESSAGES.VOICE.BREAK_WARNING_3H30(
+          thisTime.member.displayName,
+          minutesLeft
+        );
+      } else if (!sessionData.break4MessageSent && totalMinutes === FOUR_HOUR_MARK) {
+        sessionData.break4MessageSent = true;
+        const totalHours = Math.floor(totalMinutes / 60);
+        const totalMins = totalMinutes % 60;
         messageContent = MESSAGES.VOICE.BREAK_WARNING_4H(
           thisTime.member.displayName,
           sessionData.coin,
@@ -316,17 +356,20 @@ class VoiceStateManager {
       console.log(`📊 [VoiceStateManager] Session data being cleaned:`, {
         sessionCounter: existingData.sessionCounter,
         totalMinutes: existingData.totalMinutes,
+        minutesInCurrentSession: existingData.minutesInCurrentSession || 0,
         coin: existingData.coin
       });
       
-      // Clear timers
+      // Clear timers - ONLY the countdownTimer now (unified)
       if (existingData.countdownTimer) {
         clearInterval(existingData.countdownTimer);
-        console.log(`⏰ [VoiceStateManager] Cleared countdown timer for ${userId}`);
+        console.log(`⏰ [VoiceStateManager] Cleared unified countdown timer for ${userId}`);
       }
+      
+      // Legacy timer cleanup (in case old sessions still have it)
       if (existingData.timer) {
         clearInterval(existingData.timer);
-        console.log(`⏲️ [VoiceStateManager] Cleared main timer for ${userId}`);
+        console.log(`⏲️ [VoiceStateManager] Cleared legacy timer for ${userId}`);
       }
 
       // Delete countdown message
@@ -373,3 +416,8 @@ class VoiceStateManager {
 }
 
 module.exports = VoiceStateManager;
+
+
+
+
+
